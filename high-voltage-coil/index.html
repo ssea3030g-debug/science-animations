@@ -1,0 +1,1260 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>고전압 코일 시계 실험</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Noto+Sans+KR:wght@400;500;700;800&display=swap">
+</head>
+<body>
+<style>
+/* Layout: one beige stage with a single glass transport bar (play, seek, time). Palette = Claude clay orange + sand/kraft tan. */
+:root{
+  --bg:#f2eadb;
+  --surface:#fbf6ea;
+  --surface-2:#efe5d0;
+  --line:#d8caaf;
+  --ink:#2b2118;
+  --ink-2:#4a3b2c;
+  --muted:#7a6a58;
+  --clay:#d97757;
+  --clay-hi:#f09b74;
+  --sand:#a9772e;
+  --gold:#f2c35a;
+  --kraft:#c9976b;
+  --danger:#ee5b3d;
+  --f-disp:"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --f-body:"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+html,body{background:var(--bg);color:var(--ink)}
+body{font-family:var(--f-body);font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased}
+.page{max-width:1120px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px;min-height:100svh;display:grid;align-content:center}
+.player{display:block}
+.rig{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.bar{min-width:0}
+.stage{border-radius:22px;overflow:hidden;border:1px solid var(--line);background:#ece2cd;box-shadow:0 30px 60px -36px rgba(90,60,20,.35)}
+.stage svg{display:block;width:100%;height:auto}
+svg text{font-family:var(--f-body)}
+.f-disp{font-family:var(--f-disp);font-weight:800;letter-spacing:-.01em}
+.f-mono{font-family:var(--f-mono)}
+.bar{display:flex;align-items:center;gap:10px;flex-wrap:nowrap;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:10px 12px}
+.btn{white-space:nowrap;font:inherit;font-size:15px;font-weight:500;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:8px 16px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;line-height:1.2;transition:border-color .15s,background .15s}
+.btn:hover{border-color:var(--kraft)}
+.btn.primary{background:var(--clay);border-color:var(--clay);color:#2b1308;font-weight:700;min-width:124px;justify-content:center}
+.btn.primary:hover{background:var(--clay-hi);border-color:var(--clay-hi)}
+.btn svg{width:14px;height:14px;fill:currentColor}
+.btn.icon{padding:8px 12px;flex:none}
+.btn.icon svg{width:16px;height:16px}
+html.lock,html.lock body{overflow:hidden}
+.player.full{position:fixed;inset:0;z-index:50;background:var(--bg);padding:max(8px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) max(8px,env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
+.player.full .rig{position:relative;height:100%;display:flex;flex-direction:column;justify-content:center;gap:10px}
+.player.full .bar{position:absolute;left:12px;right:12px;bottom:max(10px,env(safe-area-inset-bottom,0px));z-index:2;background:rgba(251,246,234,.97);transition:opacity .25s}
+.player.full.idle .bar{opacity:0;pointer-events:none}
+.player.full .stage{flex:1 1 auto;min-height:0;display:flex;border-radius:0;border:0;box-shadow:none;background:transparent}
+.player.full .stage svg{width:100%;height:100%}
+svg.lite [filter]{filter:none}
+.player.full.rot{padding:0}
+.player.full.rot .rig{position:absolute;top:0;left:0;width:100vh;height:100vw;box-sizing:border-box;padding:8px 12px;transform-origin:0 0;transform:translateX(100vw) rotate(90deg)}
+.scrub{flex:1 1 120px;min-width:60px;accent-color:var(--clay)}
+.clock{white-space:nowrap;font-family:var(--f-mono);font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:96px;text-align:right}
+:focus-visible{outline:2px solid var(--sand);outline-offset:2px}
+@media (max-width:600px){
+  .bar{padding:8px 10px;gap:8px}
+  .clock{min-width:0;font-size:12px}
+  .btn.primary{min-width:0;padding:8px 14px}
+  .btn.icon .t{display:none}
+  #playTxt{display:none}
+  .btn.primary{padding:10px 16px}
+}
+</style>
+
+<div class="page">
+  <section class="player" id="player" aria-label="애니메이션 플레이어">
+   <div class="rig">
+    <div class="stage">
+      <svg id="svg" viewBox="0 0 1200 720" role="img" aria-label="배터리, 스위치, 고전압 발생기, 코일, 전자시계로 이루어진 실험 장치 애니메이션">
+        <defs>
+          <pattern id="dots" width="36" height="36" patternUnits="userSpaceOnUse"><circle cx="18" cy="18" r="1.4" fill="#d9cbb0"/></pattern>
+          <radialGradient id="glowA" cx="28%" cy="64%" r="55%"><stop offset="0" stop-color="#d97757" stop-opacity=".13"/><stop offset="1" stop-color="#d97757" stop-opacity="0"/></radialGradient>
+          <radialGradient id="glowB" cx="86%" cy="28%" r="45%"><stop offset="0" stop-color="#ffffff" stop-opacity=".5"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>
+          <linearGradient id="gClay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4a47f"/><stop offset=".45" stop-color="#d97757"/><stop offset="1" stop-color="#a8543a"/></linearGradient>
+          <radialGradient id="gGlowO"><stop offset="0" stop-color="#f09b74" stop-opacity=".85"/><stop offset=".55" stop-color="#f09b74" stop-opacity=".35"/><stop offset="1" stop-color="#f09b74" stop-opacity="0"/></radialGradient>
+          <radialGradient id="gGlowG"><stop offset="0" stop-color="#f2c35a" stop-opacity=".85"/><stop offset=".55" stop-color="#f2c35a" stop-opacity=".35"/><stop offset="1" stop-color="#f2c35a" stop-opacity="0"/></radialGradient>
+          <radialGradient id="gGlowR"><stop offset="0" stop-color="#f2c35a" stop-opacity="0"/><stop offset=".5" stop-color="#f2c35a" stop-opacity="0"/><stop offset=".78" stop-color="#f2c35a" stop-opacity=".75"/><stop offset="1" stop-color="#f2c35a" stop-opacity="0"/></radialGradient>
+          <linearGradient id="gClayH" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#f4a47f"/><stop offset=".45" stop-color="#d97757"/><stop offset="1" stop-color="#a8543a"/></linearGradient>
+          <linearGradient id="gHV" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#37322b"/><stop offset="1" stop-color="#151210"/></linearGradient>
+          <linearGradient id="gCase" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4a423a"/><stop offset="1" stop-color="#1a1613"/></linearGradient>
+          <linearGradient id="gStrap" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#b57c52"/><stop offset=".5" stop-color="#e0b185"/><stop offset="1" stop-color="#a86f46"/></linearGradient>
+          <linearGradient id="gLcd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f1e8d0"/><stop offset="1" stop-color="#d8cba8"/></linearGradient>
+          <linearGradient id="gRange" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#d97757" stop-opacity=".2"/><stop offset="1" stop-color="#f09b74"/></linearGradient>
+          <linearGradient id="gGlare" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".16"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+          <pattern id="scn" width="4" height="3" patternUnits="userSpaceOnUse"><rect width="4" height="1" fill="#000" fill-opacity=".3"/></pattern>
+          <filter id="glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="3.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          <filter id="sh" x="-30%" y="-30%" width="160%" height="175%"><feDropShadow dx="0" dy="10" stdDeviation="9" flood-color="#3a2410" flood-opacity=".3"/></filter>
+          <marker id="mF" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M1 1 L9 5 L1 9 Z" fill="#b07b2e"/></marker>
+          <marker id="mR" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M9 1 L1 5 L9 9 Z" fill="#b07b2e"/></marker>
+          <clipPath id="lcdClip"><rect x="-40" y="-36" width="80" height="68" rx="9"/></clipPath>
+        </defs>
+
+        <rect width="1200" height="720" fill="#ece2cd"/>
+        <rect width="1200" height="720" fill="url(#dots)"/>
+        <rect width="1200" height="720" fill="url(#glowA)"/>
+        <rect width="1200" height="720" fill="url(#glowB)"/>
+
+        <g id="tray" opacity="0">
+          <rect x="40" y="585" width="1120" height="112" rx="26" fill="#f7f0e0" stroke="#d9cbb0" stroke-width="2"/>
+          <text x="66" y="613" font-size="16" font-weight="700" fill="#8a7a66" letter-spacing="2">준비물</text>
+        </g>
+
+        <g id="bench">
+          <g id="geom" opacity="0" aria-hidden="true"></g>
+          <g id="wires"></g>
+          <g id="field"></g>
+          <g id="emi"></g>
+
+          <!-- 18650 battery (upright) -->
+          <g id="p-bat" filter="url(#sh)">
+            <rect x="-42" y="-140" width="84" height="280" rx="26" fill="#2a2420" stroke="#4b4036" stroke-width="1.5"/>
+            <rect x="-34" y="-132" width="68" height="264" rx="19" fill="#15110e"/>
+            <ellipse id="bat-glow" cx="0" cy="0" rx="78" ry="190" fill="url(#gGlowO)" opacity="0"/>
+            <rect x="-30" y="-120" width="60" height="240" rx="16" fill="url(#gClayH)"/>
+            <rect x="-9" y="120" width="18" height="12" rx="5" fill="#ecd9b6"/>
+            <rect x="-24" y="-114" width="7" height="228" rx="3.5" fill="#fff" opacity=".2"/>
+            <text transform="translate(-7 0) rotate(-90)" y="9" class="f-mono" font-size="28" font-weight="700" fill="#2c1409" text-anchor="middle">18650</text>
+            <text transform="translate(16 0) rotate(-90)" y="4" font-size="12" font-weight="500" fill="#4a2410" text-anchor="middle">3.7V · 3500mAh</text>
+            <text x="0" y="104" font-size="26" font-weight="700" fill="#2c1409" text-anchor="middle">+</text>
+            <text x="0" y="-98" font-size="26" font-weight="700" fill="#2c1409" text-anchor="middle">−</text>
+            <path d="M0 140 V146" stroke="#f09b74" stroke-width="8" stroke-linecap="round"/>
+            <path d="M0 -140 V-162" stroke="#9a8b78" stroke-width="8" stroke-linecap="round"/>
+          </g>
+
+          <!-- toggle switch -->
+          <g id="p-sw" filter="url(#sh)">
+            <rect x="-62" y="1" width="16" height="12" rx="4" fill="#d9b574"/>
+            <rect x="46" y="1" width="16" height="12" rx="4" fill="#d9b574"/>
+            <rect x="-52" y="-28" width="104" height="56" rx="18" fill="#2d2721" stroke="#4b4036" stroke-width="1.5"/>
+            <rect x="-44" y="-20" width="88" height="40" rx="12" fill="#1a1612"/>
+            <g id="sw-lever" transform="rotate(-30 0 -28)">
+              <rect x="-6" y="-80" width="12" height="54" rx="6" fill="#d97757"/>
+              <circle cx="0" cy="-82" r="9" fill="#f3dfb8"/>
+            </g>
+            <circle cx="0" cy="-28" r="13" fill="#cdbfa6" stroke="#8b7d68" stroke-width="2"/>
+            <circle id="sw-dot" cx="34" cy="-8" r="5" fill="#3d352c"/>
+            <text id="sw-txt" x="-8" y="15" class="f-mono" font-size="15" font-weight="700" fill="#a89c8a" text-anchor="middle">OFF</text>
+          </g>
+
+          <!-- high voltage generator -->
+          <g id="p-hv" filter="url(#sh)">
+            <ellipse id="hv-glow" cx="0" cy="0" rx="190" ry="120" fill="url(#gGlowG)" opacity="0"/>
+            <path d="M-120 -30 H-134" stroke="#9a8b78" stroke-width="7" stroke-linecap="round"/>
+            <path d="M-120 30 H-134" stroke="#f09b74" stroke-width="7" stroke-linecap="round"/>
+            <path d="M120 -30 H134" stroke="#f2b650" stroke-width="12" stroke-linecap="round"/>
+            <path d="M120 30 H134" stroke="#c9a46b" stroke-width="12" stroke-linecap="round"/>
+            <rect x="-120" y="-65" width="240" height="130" rx="20" fill="url(#gHV)" stroke="#f2c35a" stroke-opacity=".35" stroke-width="1.5"/>
+            <rect x="-110" y="-55" width="220" height="110" rx="13" fill="none" stroke="#fff" stroke-opacity=".06"/>
+            <path d="M-80 -34 L-50 18 L-110 18 Z" fill="#f2c35a" stroke="#f2c35a" stroke-width="5" stroke-linejoin="round" transform="translate(6 -4) scale(.88)"/>
+            <path d="M-76 -22 L-86 -2 L-77 -2 L-82 10 L-68 -8 L-77 -8 Z" fill="#1a1612" transform="translate(6 -4) scale(.88)"/>
+            <text x="30" y="-14" font-size="18" font-weight="800" fill="#f2c35a" text-anchor="middle" letter-spacing="1">HIGH VOLTAGE</text>
+            <text x="30" y="19" class="f-mono" font-size="28" font-weight="700" fill="#f6efe3" text-anchor="middle">1000kV</text>
+            <text x="30" y="43" class="f-mono" font-size="14" fill="#a89c8a" text-anchor="middle">IN 3–6V DC</text>
+          </g>
+
+          <!-- enamel wire coil (axis runs left to right) -->
+          <g id="p-coil">
+            <ellipse id="coil-glow" cx="0" cy="0" rx="96" ry="160" fill="url(#gGlowR)" opacity="0"/>
+            <g id="coil-back"></g>
+            <g id="coil-front"></g>
+            <circle cx="-49" cy="-118" r="6" fill="#e8c68e"/>
+            <circle cx="49" cy="118" r="6" fill="#e8c68e"/>
+          </g>
+
+          <!-- digital watch -->
+          <g id="p-watch" style="--s-on:#2a2118;--s-off:rgba(42,33,24,.075)">
+            <g id="w-body">
+              <path d="M-30 -50 L-27 -80 Q-26 -90 -16 -90 H16 Q26 -90 27 -80 L30 -50 Z" fill="url(#gStrap)"/>
+              <path d="M-30 50 L-27 80 Q-26 90 -16 90 H16 Q26 90 27 80 L30 50 Z" fill="url(#gStrap)"/>
+              <path d="M-19 -54 L-17 -84 M19 -54 L17 -84 M-19 54 L-17 84 M19 54 L17 84" stroke="#f6e3c3" stroke-width="1.6" stroke-dasharray="4 4" opacity=".5" fill="none"/>
+              <circle cx="0" cy="66" r="2.6" fill="#6a4529"/><circle cx="0" cy="76" r="2.6" fill="#6a4529"/>
+              <rect x="54" y="-26" width="8" height="16" rx="3" fill="#6a5d50"/>
+              <rect x="54" y="8" width="8" height="16" rx="3" fill="#6a5d50"/>
+              <rect x="-62" y="-10" width="8" height="20" rx="3" fill="#6a5d50"/>
+              <rect x="-56" y="-56" width="112" height="112" rx="32" fill="url(#gCase)" stroke="#5a4e43" stroke-width="2"/>
+              <rect x="-48" y="-48" width="96" height="96" rx="25" fill="#0d0b09"/>
+              <ellipse id="w-halo" cx="0" cy="0" rx="62" ry="56" fill="url(#gGlowO)" opacity="0"/>
+              <g id="w-lcdg" clip-path="url(#lcdClip)">
+                <rect id="w-lcd" x="-40" y="-36" width="80" height="68" fill="url(#gLcd)"/>
+                <g id="w-disp"></g>
+                <g id="w-noise"></g>
+                <rect id="w-scan" x="-40" y="-36" width="80" height="68" fill="url(#scn)" opacity="0"/>
+
+              </g>
+              <path d="M-44 -30 Q-44 -44 -30 -44 H10 L-44 10 Z" fill="url(#gGlare)"/>
+            </g>
+          </g>
+
+          <!-- measurement & safety kit -->
+          <g id="p-kit" filter="url(#sh)">
+            <path d="M-80 70 C-90 100 -40 100 -30 120" stroke="#f09b74" stroke-width="4" fill="none" stroke-linecap="round"/>
+            <path d="M-40 70 C-40 100 0 96 10 120" stroke="#9a8b78" stroke-width="4" fill="none" stroke-linecap="round"/>
+            <rect x="-112" y="-72" width="104" height="146" rx="20" fill="#e8c68e" stroke="#a8874f" stroke-width="3"/>
+            <rect x="-100" y="-60" width="80" height="34" rx="9" fill="#1f1a15"/>
+            <text x="-60" y="-35" class="f-mono" font-size="21" font-weight="700" fill="#f2c35a" text-anchor="middle">0.00</text>
+            <circle cx="-60" cy="16" r="24" fill="#2b241e"/>
+            <path d="M-60 16 L-48 -2" stroke="#f6efe3" stroke-width="4" stroke-linecap="round"/>
+            <circle cx="-80" cy="58" r="5" fill="#d97757"/>
+            <circle cx="-40" cy="58" r="5" fill="#1a1612"/>
+            <path d="M14 -46 h46 l10 8 l10 -8 h46 a14 14 0 0 1 14 14 v18 a14 14 0 0 1 -14 14 h-34 l-12 -10 -10 0 -12 10 h-34 a14 14 0 0 1 -14 -14 v-18 a14 14 0 0 1 14 -14z" fill="#ffffff" fill-opacity=".4" stroke="#8b7d68" stroke-width="4" stroke-linejoin="round"/>
+            <path d="M0 -36 h-10 M140 -36 h10" stroke="#8b7d68" stroke-width="6" stroke-linecap="round"/>
+            <path d="M30 30 L128 46 M30 30 L128 62" stroke="#cdbfa6" stroke-width="5" stroke-linecap="round" fill="none"/>
+            <path d="M22 74 h46 v40 h-46 z" fill="#d97757"/>
+            <path d="M68 78 h22 a6 6 0 0 1 0 12 h-22 M68 92 h26 a6 6 0 0 1 0 12 h-26" fill="#d97757"/>
+          </g>
+
+          <g id="pCoil"></g>
+          <g id="pFlow"></g>
+          <g id="scan"></g>
+          <g id="rings"></g>
+          <g id="fx"></g>
+          <g id="comp"></g>
+          <g id="benchLbl"></g>
+          <g id="check" opacity="0" transform="translate(-160 0)">
+            <rect x="600" y="222" width="196" height="50" rx="25" fill="#fffaf0" stroke="#b07b2e" stroke-width="2"/>
+            <path d="M624 247 l9 9 l17 -19" stroke="#b07b2e" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <text x="662" y="254" font-size="19" font-weight="700" fill="#2b2118">단락 없음</text>
+          </g>
+          <text id="done" x="600" y="150" class="f-disp" font-size="54" fill="#cf5a33" text-anchor="middle" opacity="0">합체 완료</text>
+        </g>
+
+        <!-- HV module inset -->
+        <g id="inset" opacity="0" transform="translate(22 41) scale(.85)">
+          <circle cx="680" cy="175" r="128" fill="#fffaf0" stroke="#d9970f" stroke-width="2.5"/>
+          <rect x="604" y="112" width="152" height="122" rx="10" fill="none" stroke="#6a5d50" stroke-width="14"/>
+          <g id="prim"></g>
+          <g id="sec"></g>
+          <text x="604" y="268" font-size="18" font-weight="700" fill="#cf5a33" text-anchor="middle">1차</text>
+          <text x="756" y="268" font-size="18" font-weight="700" fill="#b9780a" text-anchor="middle">2차</text>
+          <text x="612" y="98" class="f-mono" font-size="18" font-weight="700" fill="#cf5a33" text-anchor="middle">3.7 V</text>
+          <text x="748" y="98" font-size="18" font-weight="700" fill="#b9780a" text-anchor="middle">수만 V</text>
+        </g>
+
+        <!-- output voltage meter -->
+        <g id="meter" opacity="0" transform="translate(-120 -20)">
+          <rect x="566" y="508" width="228" height="92" rx="20" fill="#fffaf0" stroke="#d9970f" stroke-opacity=".8" stroke-width="2"/>
+          <text x="586" y="538" font-size="16" font-weight="500" fill="#7a6a58">출력 전압</text>
+          <text id="meterV" x="776" y="580" class="f-mono" font-size="28" font-weight="700" fill="#b9780a" text-anchor="end">3.7 V</text>
+          <text x="680" y="626" font-size="16" fill="#7a6a58" text-anchor="middle">제품에 적힌 최댓값</text>
+        </g>
+
+        <!-- scene 1 info card -->
+        <g id="card" opacity="0">
+          <rect x="640" y="190" width="510" height="394" rx="28" fill="#fffaf0" stroke="#d8caaf" stroke-width="2"/>
+          <g id="cDots"></g>
+          <text id="cIdx" x="672" y="272" class="f-mono" font-size="16" font-weight="500" fill="#7a6a58" letter-spacing="1">전원</text>
+          <text id="cName" x="672" y="330" class="f-disp" font-size="46" fill="#2b2118">18650 배터리</text>
+          <text id="cSpec" x="672" y="372" font-size="21" font-weight="500" fill="#a9772e">3.7V</text>
+          <line x1="672" y1="398" x2="1118" y2="398" stroke="#d8caaf" stroke-width="2"/>
+          <text x="672" y="436" font-size="18" font-weight="700" fill="#cf5a33">용도</text>
+          <text id="cU0" x="672" y="478" font-size="24" fill="#2b2118"></text>
+          <text id="cU1" x="672" y="516" font-size="24" fill="#2b2118"></text>
+          <text id="cU2" x="672" y="554" font-size="24" fill="#2b2118"></text>
+        </g>
+
+        <g id="panels"></g>
+
+        <!-- scene 5 : what happens inside the watch -->
+        <g id="nz" opacity="0">
+          <rect x="40" y="112" width="392" height="496" rx="28" fill="#fffaf0" stroke="#d8caaf" stroke-width="2"/>
+          <text x="68" y="160" class="f-disp" font-size="27" fill="#2b2118">시계 속에서 일어나는 일</text>
+          <g id="nz1">
+            <circle cx="88" cy="222" r="24" fill="#f1e6d0"/>
+            <path d="M72 222 q8 -16 16 0 t16 0" stroke="#b07b2e" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+            <text x="126" y="216" font-size="21" font-weight="700" fill="#2b2118">센 전기장과 방전 잡음</text>
+            <text x="126" y="244" font-size="17" fill="#7a6a58">코일 주변에서 빠르게 바뀜</text>
+          </g>
+          <g id="nz2">
+            <circle cx="88" cy="316" r="24" fill="#f1e6d0"/>
+            <path d="M74 326 v-20 h28 v20 M74 306 l5 -6 M102 306 l-5 -6" stroke="#cf5a33" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <text x="126" y="310" font-size="21" font-weight="700" fill="#2b2118">회로 도선에 잡음 전압</text>
+            <text x="126" y="338" font-size="17" fill="#7a6a58">작지만 아주 빠른 전압 흔들림</text>
+            <rect x="68" y="360" width="336" height="84" rx="14" fill="#ffffff" stroke="#d8caaf"/>
+            <line x1="76" y1="402" x2="396" y2="402" stroke="#d8caaf" stroke-dasharray="4 5"/>
+            <polyline id="nzWave" points="" fill="none" stroke="#d9820f" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+          </g>
+          <g id="nz3">
+            <rect x="64" y="488" width="48" height="48" rx="10" fill="#f1e6d0" stroke="#b07b2e" stroke-width="2.5"/>
+            <path d="M76 480 v8 M88 480 v8 M100 480 v8 M76 536 v8 M88 536 v8 M100 536 v8 M56 500 h8 M56 524 h8 M112 500 h8 M112 524 h8" stroke="#b07b2e" stroke-width="3" stroke-linecap="round"/>
+            <text x="88" y="519" class="f-mono" font-size="14" font-weight="700" fill="#b07b2e" text-anchor="middle">IC</text>
+            <text x="138" y="504" font-size="21" font-weight="700" fill="#2b2118">칩이 잡음을 신호로 착각</text>
+            <text x="138" y="534" font-size="19" font-weight="700" fill="#d4412a">→ 화면이 엉뚱하게 그려짐</text>
+          </g>
+        </g>
+
+        <!-- scene 5 HUD (screen space) -->
+        <g id="hud" opacity="0">
+          <g>
+            <rect x="36" y="30" width="226" height="58" rx="29" fill="#fffaf0" fill-opacity=".94" stroke="#d8caaf" stroke-width="2"/>
+            <rect id="hTrack" x="50" y="44" width="68" height="30" rx="15" fill="#cfc2a8"/>
+            <circle id="hKnob" cx="65" cy="59" r="11" fill="#ffffff"/>
+            <text id="hPow" x="132" y="67" font-size="22" font-weight="700" fill="#7a6a58">전원 OFF</text>
+          </g>
+          <g>
+            <rect id="hsBox" x="896" y="30" width="268" height="58" rx="29" fill="#fffaf0" fill-opacity=".94" stroke="#b07b2e" stroke-width="2"/>
+            <circle id="hsDot" cx="928" cy="59" r="8" fill="#b07b2e"/>
+            <text id="hsTxt" x="950" y="67" font-size="22" font-weight="700" fill="#a9772e">정상 작동</text>
+          </g>
+        </g>
+
+        <g id="sub"></g>
+
+        <!-- scene title card -->
+        <g id="tcard" opacity="0">
+          <rect width="1200" height="720" fill="#efe6d3" fill-opacity=".9"/>
+          <g id="tcIn">
+            <rect x="514" y="290" width="172" height="42" rx="21" fill="#fffaf0" stroke="#d0bfa0" stroke-width="1.5"/>
+            <text id="tcK" x="600" y="317" class="f-mono" font-size="17" font-weight="700" fill="#cf5a33" text-anchor="middle" letter-spacing="3">PART 1</text>
+            <text id="tcN" x="600" y="410" class="f-disp" font-size="66" fill="#2b2118" text-anchor="middle">재료 소개</text>
+            <rect id="tcL" x="600" y="436" width="0" height="5" rx="2.5" fill="#d97757"/>
+          </g>
+        </g>
+      </svg>
+    </div>
+
+    <div class="bar">
+      <button class="btn primary" id="play" type="button" aria-label="재생">
+        <svg viewBox="0 0 14 14" aria-hidden="true"><path id="playIcon" d="M3 1.5 L12 7 L3 12.5 Z"/></svg>
+        <span id="playTxt">재생</span>
+      </button>
+      <input class="scrub" id="scrub" type="range" min="0" max="184" step="0.1" value="0" aria-label="재생 위치">
+      <span class="clock" id="clock">0:00 / 1:46</span>
+      <button class="btn icon" id="rot" type="button" aria-label="화면 돌리기" title="화면 돌리기" hidden>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.2 8a5.2 5.2 0 1 1-1.9-4M13 2v3.2H9.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="btn icon" id="fs" type="button" aria-label="전체화면" title="전체화면">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path id="fsIcon" d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="t" id="fsTxt">전체화면</span>
+      </button>
+    </div>
+
+   </div>
+  </section>
+</div>
+
+<script>
+(function(){
+"use strict";
+/* skip DOM writes whose value did not change: fewer repaints, steadier frame rate at full screen */
+(function(){
+  const sa = Element.prototype.setAttribute, ra = Element.prototype.removeAttribute;
+  Element.prototype.setAttribute = function(k, v){ const sv = String(v), c = this.__a || (this.__a = {}); if(c[k] === sv) return; c[k] = sv; sa.call(this, k, sv); };
+  Element.prototype.removeAttribute = function(k){ if(this.__a) delete this.__a[k]; ra.call(this, k); };
+})();
+const NS = "http://www.w3.org/2000/svg";
+const $ = id => document.getElementById(id);
+function mk(tag, attrs, parent){ const e = document.createElementNS(NS, tag); if(attrs) for(const k in attrs) e.setAttribute(k, attrs[k]); if(parent) parent.appendChild(e); return e; }
+function txt(parent, x, y, s, attrs){ const e = mk("text", Object.assign({x, y}, attrs || {}), parent); e.textContent = s; return e; }
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, p) => a + (b - a) * p;
+const eio = p => p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+const eout = p => 1 - Math.pow(1 - p, 3);
+const eback = p => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2); };
+function fade(t, a, b, c, d){ if(t < a || t > d) return 0; if(t < b) return seg(t, a, b); if(t <= c) return 1; return 1 - seg(t, c, d); }
+function rnd(n){ const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
+function hex(c){ return [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16)); }
+function mix(a, b, p){ const A = hex(a), B = hex(b); return "#" + A.map((v, i) => Math.round(lerp(v, B[i], p)).toString(16).padStart(2, "0")).join(""); }
+function op(e, v){ if(e.__o !== v){ e.__o = v; e.style.opacity = v; } }
+function estW(s, fs){ let w = 0; for(const ch of s) w += (ch.charCodeAt(0) > 255 ? 1 : .58) * fs; return w; }
+
+/* palette */
+const C = { clay: "#d97757", clayHi: "#cf5a33", sand: "#b07b2e", gold: "#b9780a", kraft: "#c9976b", ink: "#2b2118", muted: "#7a6a58", danger: "#d4412a", cur: "#fff4dc" };
+
+/* ---------- icons (drawn around 0,0, about ±40) ---------- */
+const ICON = {
+  battery: '<rect x="-36" y="-16" width="66" height="32" rx="9" fill="#d97757"/><rect x="30" y="-7" width="7" height="14" rx="3" fill="#ecd9b6"/><text x="-3" y="6" font-size="15" fill="#2c1409" text-anchor="middle" font-weight="700">3.7V</text>',
+  plug: '<rect x="-26" y="-26" width="52" height="52" rx="16" fill="#efe5d2"/><circle cx="-10" cy="0" r="5.5" fill="#2b241e"/><circle cx="10" cy="0" r="5.5" fill="#2b241e"/>',
+  eel: '<path d="M-40 4 C-28 -14 -14 18 0 2 S 26 -14 40 0" stroke="#a9a56a" stroke-width="11" fill="none" stroke-linecap="round"/><circle cx="-40" cy="4" r="9" fill="#a9a56a"/><circle cx="-43" cy="1" r="2.2" fill="#1a1612"/><path d="M6 -30 l-7 11 h8 l-7 11" stroke="#f2c35a" stroke-width="3.5" fill="none" stroke-linejoin="round"/>',
+  cow: '<rect x="-30" y="-14" width="60" height="30" rx="12" fill="#efe5d2"/><ellipse cx="-4" cy="-4" rx="9" ry="7" fill="#2c261f"/><ellipse cx="16" cy="7" rx="7" ry="5" fill="#2c261f"/><rect x="-26" y="12" width="7" height="20" rx="2" fill="#efe5d2"/><rect x="-13" y="12" width="7" height="20" rx="2" fill="#efe5d2"/><rect x="10" y="12" width="7" height="20" rx="2" fill="#efe5d2"/><rect x="21" y="12" width="7" height="20" rx="2" fill="#efe5d2"/><rect x="-50" y="-26" width="24" height="24" rx="8" fill="#efe5d2"/><ellipse cx="-46" cy="-6" rx="10" ry="7" fill="#e9a8a0"/><path d="M-47 -26 q-4 -8 -10 -8 M-30 -26 q4 -8 10 -8" stroke="#d9cfa8" stroke-width="3.5" fill="none" stroke-linecap="round"/><circle cx="-42" cy="-17" r="2.2" fill="#1a1612"/><path d="M30 -10 q10 4 6 18" stroke="#efe5d2" stroke-width="3" fill="none"/>',
+  spark: '<circle cx="14" cy="0" r="17" fill="#d9a85a"/><circle cx="14" cy="0" r="7" fill="#b3822f"/><path d="M-34 -14 l12 8 -9 5 13 8" stroke="#ffe3ad" stroke-width="3.5" fill="none" stroke-linejoin="round"/>',
+  tower: '<path d="M0 -38 L-20 38 M0 -38 L20 38 M-34 -24 H34 M-26 -8 H26 M-12 10 H12 M-14 12 L14 36 M14 12 L-14 36 M-34 -24 v8 M34 -24 v8" stroke="#cdbfa6" stroke-width="3.5" fill="none" stroke-linecap="round"/>',
+  module: '<rect x="-32" y="-22" width="64" height="44" rx="10" fill="#26211c" stroke="#f2c35a" stroke-width="2.5"/><path d="M0 -13 L13 11 H-13 Z" fill="#f2c35a"/>',
+  bolt: '<path d="M8 -40 L-20 4 H-2 L-12 40 L20 -6 H2 Z" fill="#fff0cc"/>',
+  elephant: '<ellipse cx="6" cy="2" rx="38" ry="27" fill="#a89f94"/><rect x="-24" y="16" width="13" height="28" rx="4" fill="#a89f94"/><rect x="-6" y="18" width="13" height="26" rx="4" fill="#948b81"/><rect x="18" y="16" width="13" height="28" rx="4" fill="#a89f94"/><rect x="32" y="12" width="11" height="30" rx="4" fill="#948b81"/><circle cx="-32" cy="-12" r="20" fill="#a89f94"/><path d="M-48 -4 C-62 8 -62 30 -52 42" stroke="#a89f94" stroke-width="10" fill="none" stroke-linecap="round"/><ellipse cx="-20" cy="-8" rx="13" ry="18" fill="#8a8178"/><circle cx="-40" cy="-16" r="2.6" fill="#1a1612"/><path d="M-46 4 q-8 6 -3 12" stroke="#f3eee2" stroke-width="3.5" fill="none" stroke-linecap="round"/><path d="M44 -4 q8 6 4 16" stroke="#a89f94" stroke-width="3" fill="none"/>',
+  globe: '<circle r="28" fill="#4a7ea6"/><ellipse cx="-8" cy="-8" rx="13" ry="9" fill="#9aae6a"/><ellipse cx="11" cy="11" rx="10" ry="7" fill="#9aae6a"/><ellipse cx="14" cy="-14" rx="5" ry="4" fill="#9aae6a"/>'
+};
+
+/* ---------- script: scenes and captions ---------- */
+const SCENES = [
+  { name: "재료 소개", card: "재료 소개", dur: 15.6, beats: [
+    { t: 0,  title: "실험에 쓰는 재료" },
+    { t: 1.2,  title: "18650 리튬이온 배터리 (3.7V, 3500mAh)" },
+    { t: 3.6,  title: "토글 스위치" },
+    { t: 6.0, title: "고전압 발생기 모듈 (입력 3~6V, 표기 1000kV)" },
+    { t: 8.4, title: "에나멜선 코일" },
+    { t: 10.8, title: "전자시계 (디지털 손목시계)" },
+    { t: 13.2, title: "측정 · 안전 장비" }
+  ]},
+  { name: "합체", card: "합체! 장치 조립", dur: 22, beats: [
+    { t: 0,    title: "재료들이 제자리로" },
+    { t: 6,    title: "①②③ 배터리 · 스위치 · 모듈 연결" },
+    { t: 12.5, title: "④⑤ 모듈 출력 → 코일 양 끝" },
+    { t: 17.5, title: "⑥ 배선 점검" },
+    { t: 20.5, title: "합체 완료" }
+  ]},
+  { name: "고전압", card: "고전압 발생", dur: 46, beats: [
+    { t: 0,    title: "스위치 ON" },
+    { t: 3,    title: "전류가 전선을 타고 이동" },
+    { t: 9,    title: "모듈 속에서 일어나는 일: 승압" },
+    { t: 15,   title: "출력 전압 100만 V?" },
+    { t: 19,   title: "이 전압은 얼마나 셀까?" },
+    { t: 31,   title: "전압만 보면 코끼리도 즉사" },
+    { t: 37,   title: "하지만 진짜 위험을 정하는 건 전류" },
+    { t: 42.5, title: "그래도 위험합니다" }
+  ]},
+  { name: "전기장", card: "코일과 전기장", dur: 48, beats: [
+    { t: 0,    title: "고전압이 코일로" },
+    { t: 5,    title: "코일을 따라 빙글빙글" },
+    { t: 11,   title: "코일 주변에 전기장이 퍼진다" },
+    { t: 17,   title: "방향이 계속 바뀌는 전기장" },
+    { t: 22,   title: "이 전기장은 얼마나 셀까?" },
+    { t: 31.5, title: "계산해 보기: E ≈ V ÷ d" },
+    { t: 36,   title: "공기가 못 견디면 불꽃" },
+    { t: 41,   title: "이 잡음이 시계를 흔든다" },
+    { t: 45,   title: "스위치 OFF" }
+  ]},
+  { name: "시계 시험", card: "전자시계 시험", dur: 34, beats: [
+    { t: 0,    title: "코일 한가운데에 전자시계를" },
+    { t: 3,    title: "스위치 OFF: 시계는 멀쩡" },
+    { t: 8.2,  title: "ON! 화면이 갑자기 이상해진다" },
+    { t: 12,   title: "왜 이상해질까?" },
+    { t: 18,   title: "전류는 작아도 전기장 잡음은 충분" },
+    { t: 21,   title: "스위치 OFF" },
+    { t: 22.9, title: "화면이 원래대로 돌아온다" },
+    { t: 27,   title: "항상 안전한 건 아닙니다" },
+    { t: 31,   title: "정리" }
+  ]}
+];
+let acc = 0; SCENES.forEach(s => { s.start = acc; acc += s.dur; });
+const TOTAL = acc;
+const ST = SCENES.map(s => s.start);
+function sceneAt(T){ for(let i = SCENES.length - 1; i >= 0; i--) if(T >= ST[i]) return i; return 0; }
+
+/* ---------- parts ---------- */
+const ORDER = ["bat", "sw", "hv", "coil", "watch", "kit"];
+const PARTS = {
+  bat:   { layout: [120, 380, 1],   tray: [170, 641, .38], show: [330, 380, 1.2] },
+  sw:    { layout: [300, 538, 1],   tray: [306, 652, .6],  show: [330, 410, 2.0] },
+  hv:    { layout: [560, 370, 1],   tray: [502, 640, .5],  show: [330, 380, 1.55] },
+  coil:  { layout: [985, 370, 1],   tray: [700, 641, .42], show: [360, 380, 1.3] },
+  watch: { layout: [985, 370, 1],   tray: [894, 640, .42], show: [330, 375, 1.7] },
+  kit:   { layout: [1110, 88, .42], tray: [1090, 632, .42], show: [320, 380, 1.5] }
+};
+ORDER.forEach(k => PARTS[k].el = $("p-" + k));
+const CARDS = [
+  { cat: "전원", name: "18650 배터리", spec: "3.7V · 3500mAh · 리튬이온", use: ["장치에 전기를 주는 전원", "낮은 전압의 직류(DC) 공급", "보호회로 홀더에 끼워 사용"] },
+  { cat: "스위치", name: "토글 스위치", spec: "배터리와 모듈 사이에 연결", use: ["전원을 켜고 끄는 문", "1~2초만 짧게 켜서 실험"] },
+  { cat: "승압 모듈", name: "고전압 발생기", spec: "입력 3~6V · 표기 출력 1000kV", use: ["3.7V를 수만 V 이상으로 승압", "흐르는 전류는 μA 수준"] },
+  { cat: "코일", name: "에나멜선 코일", spec: "지름 3~5cm · 10~20회 감기", use: ["고전압이 흐르는 원형 길", "주변에 센 전기장 형성"] },
+  { cat: "시험 대상", name: "전자시계", spec: "디지털 손목시계 · LCD + 칩", use: ["코일 위에 올려 관찰할 대상", "작은 칩(IC)과 액정(LCD) 내장", "고장 위험, 안 쓰는 시계로"] },
+  { cat: "측정 · 안전", name: "점검 · 보호 장비", spec: "멀티미터·보안경·장갑·핀셋", use: ["배선 단락과 상태 점검", "감전·파편으로부터 몸 보호"] }
+];
+const cDots = $("cDots");
+const cDotEls = CARDS.map((_, i) => mk("circle", { cx: 680 + i * 22, cy: 228, r: 5, fill: "#d8caaf" }, cDots));
+
+/* coil turns: loops stacked along a horizontal axis */
+(function(){
+  const back = $("coil-back"), front = $("coil-front");
+  for(let i = 0; i < 8; i++){
+    const cx = -49 + i * 14;
+    mk("path", { d: `M${cx} -118 A30 118 0 0 0 ${cx} 118`, fill: "none", stroke: "#7a4524", "stroke-width": 5.5 }, back);
+    mk("path", { d: `M${cx} -118 A30 118 0 0 1 ${cx} 118`, fill: "none", stroke: "#d98a52", "stroke-width": 6 }, front);
+    mk("path", { d: `M${cx + 6} -100 A24 100 0 0 1 ${cx + 6} 100`, fill: "none", stroke: "#f6c597", "stroke-width": 1.6, opacity: .6 }, front);
+  }
+})();
+
+/* ---------- watch display ---------- */
+const wDisp = $("w-disp"), wLcd = $("w-lcd"), wNoise = $("w-noise"), wScan = $("w-scan"), wHalo = $("w-halo"), wLcdG = $("w-lcdg"), wBody = $("w-body"), pWatch = $("p-watch");
+function makeDigit(parent, x, y, w, h, t){
+  const s = [], r = t * .45, hh = h / 2;
+  const R = (sx, sy, sw, sh) => { const e = mk("rect", { x: sx, y: sy, width: sw, height: sh, rx: r }, parent); e.style.fill = "var(--s-off)"; return e; };
+  s[0] = R(x + t * .6, y, w - t * 1.2, t);
+  s[1] = R(x + w - t, y + t * .6, t, hh - t * 1.2);
+  s[2] = R(x + w - t, y + hh + t * .6, t, hh - t * 1.2);
+  s[3] = R(x + t * .6, y + h - t, w - t * 1.2, t);
+  s[4] = R(x, y + hh + t * .6, t, hh - t * 1.2);
+  s[5] = R(x, y + t * .6, t, hh - t * 1.2);
+  s[6] = R(x + t * .6, y + hh - t / 2, w - t * 1.2, t);
+  return { s, m: -1 };
+}
+const MASK = [63, 6, 91, 79, 102, 109, 125, 7, 127, 111];
+function setMask(d, m){ if(d.m === m) return; d.m = m; for(let i = 0; i < 7; i++) d.s[i].style.fill = ((m >> i) & 1) ? "var(--s-on)" : "var(--s-off)"; }
+const mainX = [-32, -16, 3, 19];
+const wMain = mainX.map(x => makeDigit(wDisp, x, -19, 13, 26, 3.4));
+const wSec = [-9, 0].map(x => makeDigit(wDisp, x, 13, 7, 13, 2.2));
+const wColon = mk("g", {}, wDisp);
+[-6, 4].forEach(dy => { const c = mk("circle", { cx: .5, cy: -6 + dy + 8, r: 1.9 }, wColon); c.style.fill = "var(--s-on)"; });
+const wDay = txt(wDisp, -34, -26, "THU", { class: "f-mono", "font-size": 8.5, "font-weight": 700, "text-anchor": "start" }); wDay.style.fill = "var(--s-on)";
+const wDate = txt(wDisp, 34, -26, "11.05", { class: "f-mono", "font-size": 8.5, "font-weight": 700, "text-anchor": "end" }); wDate.style.fill = "var(--s-on)";
+{ const e = txt(wDisp, -34, 25, "SEC", { class: "f-mono", "font-size": 7, "font-weight": 700 }); e.style.fill = "var(--s-on)"; }
+const wBars = [0, 1, 2].map(() => mk("rect", { x: -40, width: 80, height: 3, fill: "#0d0b09", opacity: 0 }, wNoise));
+const wBlocks = Array.from({ length: 9 }, () => { const e = mk("rect", { width: 6, height: 5, opacity: 0 }, wNoise); e.style.fill = "var(--s-on)"; return e; });
+let wInv = null, wPrevKind = "";
+function watchKind(T){
+  if(T < ST[4]) return "normal";
+  const t5 = T - ST[4];
+  if(t5 >= 8.4 && t5 < 21.3) return "glitch";
+  if(t5 >= 21.3 && t5 < 21.8) return "blank";
+  if(t5 >= 21.8 && t5 < 22.9) return "test";
+  return "normal";
+}
+function renderWatch(T, kind){
+  const now = new Date(), hh = now.getHours(), mm = now.getMinutes(), ss = now.getSeconds();
+  const dayTxt = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][now.getDay()], dateTxt = String(now.getMonth() + 1).padStart(2, "0") + "." + String(now.getDate()).padStart(2, "0");
+  if(wDay.textContent !== dayTxt) wDay.textContent = dayTxt;
+  if(wDate.textContent !== dateTxt) wDate.textContent = dateTxt;
+  const trueM = [MASK[Math.floor(hh / 10)], MASK[hh % 10], MASK[Math.floor(mm / 10)], MASK[mm % 10]];
+  const trueS = [MASK[Math.floor(ss / 10)], MASK[ss % 10]];
+  let mm4 = trueM.slice(), ms2 = trueS.slice(), colon = (Math.floor(Date.now() / 500) % 2 === 0), inv = false;
+  let jx = 0, halo = 0, lcdO = 1, scan = 0, shake = 0;
+  if(kind === "blank"){ mm4 = [0, 0, 0, 0]; ms2 = [0, 0]; colon = false; }
+  else if(kind === "test"){ mm4 = [127, 127, 127, 127]; ms2 = [127, 127]; colon = true; }
+  else if(kind === "glitch"){
+    const tk = Math.floor(T * 13);
+    mm4 = mm4.map((tm, j) => { const r = rnd(tk * 17 + j * 5.3); return r < .5 ? Math.floor(rnd(tk * 7 + j * 3.1) * 128) : r < .72 ? 127 : r < .86 ? 0 : tm; });
+    ms2 = ms2.map((tm, j) => { const r = rnd(tk * 11 + j * 4.7); return r < .7 ? Math.floor(rnd(tk * 5 + j * 2.3) * 128) : 127; });
+    colon = rnd(tk * 3.1) > .4;
+    inv = rnd(tk * 2.3) > .87;
+    jx = rnd(tk * 1.7) > .5 ? (rnd(tk * 5.1) - .5) * 8 : 0;
+    halo = .15 + .55 * rnd(tk * 8.3);
+    lcdO = .62 + .38 * rnd(tk * 11.9);
+    scan = .9;
+    shake = (rnd(tk * 6.6) - .5) * 3;
+    wBars.forEach((b, k) => { const on = rnd(tk * 9 + k) > .42; b.setAttribute("y", (-36 + rnd(tk * 4 + k) * 62).toFixed(1)); b.setAttribute("height", (2 + rnd(tk * 6 + k) * 8).toFixed(1)); op(b, on ? .88 : 0); });
+    wBlocks.forEach((b, k) => { const on = rnd(tk * 13 + k * 1.9) > .5; b.setAttribute("x", (-40 + rnd(tk * 3 + k) * 74).toFixed(1)); b.setAttribute("y", (-36 + rnd(tk * 7 + k) * 62).toFixed(1)); b.setAttribute("width", (3 + rnd(tk + k) * 8).toFixed(1)); b.setAttribute("height", (2 + rnd(tk * 2 + k) * 6).toFixed(1)); op(b, on ? .9 : 0); });
+  }
+  if(kind !== "glitch" && wPrevKind === "glitch"){ wBars.concat(wBlocks).forEach(b => op(b, 0)); }
+  wPrevKind = kind;
+  mm4.forEach((m, j) => setMask(wMain[j], m));
+  ms2.forEach((m, j) => setMask(wSec[j], m));
+  op(wColon, colon ? 1 : 0);
+  wDisp.setAttribute("transform", `translate(${jx.toFixed(2)} 0)`);
+  wBody.setAttribute("transform", `translate(${shake.toFixed(2)} ${(shake * .6).toFixed(2)})`);
+  op(wLcdG, lcdO); op(wHalo, halo); op(wScan, scan);
+  if(wInv !== inv){ wInv = inv; wLcd.setAttribute("fill", inv ? "#1b1612" : "url(#gLcd)"); pWatch.style.setProperty("--s-on", inv ? "#efe5cc" : "#2a2118"); pWatch.style.setProperty("--s-off", inv ? "rgba(239,229,204,.08)" : "rgba(42,33,24,.075)"); }
+}
+
+/* ---------- wires ---------- */
+const WIRES = [
+  { d: "M120 524 Q120 545 140 545 L238 545", color: "#ef8d62", w: 7, draw: [6, 8] },
+  { d: "M362 545 L395 545 Q415 545 415 525 L415 410 Q415 400 425 400 L440 400", color: "#ef8d62", w: 7, draw: [8, 10] },
+  { d: "M120 218 Q120 200 140 200 L370 200 Q390 200 390 220 L390 330 Q390 340 400 340 L440 340", color: "#9a8b78", w: 7, draw: [10, 12.2] },
+  { d: "M680 340 L760 340 Q800 340 810 300 Q820 252 870 252 L936 252", color: "#f2b650", w: 12, draw: [12.6, 14.4] },
+  { d: "M680 400 L770 400 Q800 400 805 430 Q812 520 850 520 L1034 520 L1034 488", color: "#c9a46b", w: 12, draw: [12.6, 14.4] }
+];
+const wiresG = $("wires"), scanG = $("scan");
+WIRES.forEach(w => {
+  w.g = mk("g", {}, wiresG);
+  w.outer = mk("path", { d: w.d, fill: "none", stroke: "#0c0a08", "stroke-width": w.w + 4, "stroke-linecap": "round", "stroke-linejoin": "round" }, w.g);
+  w.inner = mk("path", { d: w.d, fill: "none", stroke: w.color, "stroke-width": w.w, "stroke-linecap": "round", "stroke-linejoin": "round" }, w.g);
+  w.L = w.inner.getTotalLength();
+  w.scan = mk("path", { d: w.d, fill: "none", stroke: "#ffffff", "stroke-width": 4, "stroke-linecap": "round", opacity: 0 }, scanG);
+});
+
+/* hidden geometry for particles */
+const geom = $("geom");
+const pIN = mk("path", { d: "M120 524 Q120 545 140 545 L238 545 L362 545 L395 545 Q415 545 415 525 L415 410 Q415 400 425 400 L440 400", fill: "none" }, geom);
+const pRET = mk("path", { d: "M440 340 L400 340 Q390 340 390 330 L390 220 Q390 200 370 200 L140 200 Q120 200 120 218", fill: "none" }, geom);
+const pA = mk("path", { d: "M680 340 L760 340 Q800 340 810 300 Q820 252 870 252 L936 252", fill: "none" }, geom);
+const pC = mk("path", { d: "M1034 488 L1034 520 L850 520 Q812 520 805 430 Q800 400 770 400 L680 400", fill: "none" }, geom);
+function tab(path){ const L = path.getTotalLength(), n = Math.max(2, Math.ceil(L / 2)), a = []; for(let i = 0; i <= n; i++){ const q = path.getPointAtLength(L * i / n); a.push(q.x, q.y); } return { a, n, L }; }
+function at(t, d){ const f = clamp(d / t.L) * t.n, i = Math.min(t.n - 1, Math.floor(f)), u = f - i; return [lerp(t.a[2 * i], t.a[2 * i + 2], u), lerp(t.a[2 * i + 1], t.a[2 * i + 3], u)]; }
+const L_IN = pIN.getTotalLength(), L_RET = pRET.getTotalLength(), LA = pA.getTotalLength(), LC = pC.getTotalLength();
+const T_IN = tab(pIN), T_RET = tab(pRET), T_A = tab(pA), T_C = tab(pC);
+function helix(s){ const th = Math.PI - s * 15 * Math.PI; return [936 + 98 * s + 30 * Math.sin(th), 370 + 118 * Math.cos(th), Math.sin(th)]; }
+let LH = 0; { let prev = helix(0); for(let i = 1; i <= 1400; i++){ const p = helix(i / 1400); LH += Math.hypot(p[0] - prev[0], p[1] - prev[1]); prev = p; } }
+const L_COIL = LA + LH + LC;
+
+const flowG = $("pFlow"), coilPG = $("pCoil");
+const GAP_IN = 28, GAP_RET = 36, GAP_COIL = 60;
+const poolIn = Array.from({ length: Math.ceil(L_IN / GAP_IN) }, () => mk("circle", { r: 5, fill: C.cur, stroke: "#d9603a", "stroke-width": 2, opacity: 0 }, flowG));
+const poolRet = Array.from({ length: Math.ceil(L_RET / GAP_RET) }, () => mk("circle", { r: 4.5, fill: C.cur, stroke: "#d9603a", "stroke-width": 2, opacity: 0 }, flowG));
+const poolCoil = Array.from({ length: Math.ceil(L_COIL / GAP_COIL) }, () => mk("circle", { r: 5.5, fill: "#fff1c9", stroke: "#c97a1a", "stroke-width": 2, opacity: 0 }, coilPG));
+
+/* snap rings (scene 2) */
+const ringsG = $("rings");
+const SNAPS = [];
+["bat", "sw", "hv", "coil", "kit"].forEach((k, j) => SNAPS.push({ t: 0.6 + j * 0.8 + 1.4, x: PARTS[k].layout[0], y: PARTS[k].layout[1], c: C.clayHi }));
+WIRES.forEach(w => { const p = w.inner.getPointAtLength(w.L); SNAPS.push({ t: w.draw[1], x: p.x, y: p.y, c: C.sand }); });
+SNAPS.forEach(s => s.el = mk("circle", { cx: s.x, cy: s.y, r: 10, fill: "none", stroke: s.c, "stroke-width": 4, opacity: 0 }, ringsG));
+
+/* EMI waves (scene 5) */
+const emiG = $("emi");
+const emi = [0, 1, 2].map(() => mk("ellipse", { cx: 985, cy: 370, rx: 100, ry: 140, fill: "none", stroke: C.sand, "stroke-width": 2.5, opacity: 0 }, emiG));
+
+/* zaps */
+const fxG = $("fx");
+const zaps = Array.from({ length: 4 }, () => mk("polyline", { points: "", fill: "none", stroke: "#f2a516", "stroke-width": 2.5, opacity: 0, filter: "url(#glow)", "stroke-linejoin": "round" }, fxG));
+function zapPts(x1, y1, x2, y2, seed, n = 7, amp = 12){
+  const pts = [];
+  for(let i = 0; i <= n; i++){ const p = i / n; const j = (i === 0 || i === n) ? 0 : (rnd(seed + i * 7.3) - .5) * 2 * amp; pts.push(`${(lerp(x1, x2, p) + j).toFixed(1)},${(lerp(y1, y2, p) + (rnd(seed + i * 3.1) - .5) * amp).toFixed(1)}`); }
+  return pts.join(" ");
+}
+
+/* ---------- bench labels ---------- */
+const benchLbl = $("benchLbl");
+function pill(parent, cx, cy, label, color, fs){
+  fs = fs || 19;
+  const w = estW(label, fs) + 30, h = fs + 18;
+  const g = mk("g", { opacity: 0 }, parent);
+  mk("rect", { x: cx - w / 2, y: cy - h / 2, width: w, height: h, rx: h / 2, fill: "#fffaf0", "fill-opacity": .96, stroke: color, "stroke-opacity": .7, "stroke-width": 1.8 }, g);
+  txt(g, cx, cy + fs * .36, label, { "font-size": fs, "font-weight": 700, fill: color, "text-anchor": "middle" });
+  return g;
+}
+const lblCur = pill(benchLbl, 392, 470, "전류", "#c2491f");
+const lblRet = pill(benchLbl, 255, 166, "돌아오는 전류", "#c2491f", 18);
+const lblHV = pill(benchLbl, 745, 370, "고전압 출력", C.gold, 18);
+function badge(cx, cy, letter, fill){
+  const g = mk("g", { opacity: 0 }, benchLbl);
+  const c = mk("circle", { cx, cy, r: 26, fill }, g);
+  const t = txt(g, cx, cy + 12, letter, { class: "f-disp", "font-size": 34, fill: "#2c1409", "text-anchor": "middle" });
+  return { g, c, t };
+}
+const lblN = badge(905, 205, "+", C.clay), lblS = badge(1078, 532, "−", C.sand);
+
+/* ---------- magnetic field lines ---------- */
+const fieldG = $("field");
+const FL = [];
+{
+  const P = [936, 252], Q = [1034, 488], dx = Q[0] - P[0], dy = Q[1] - P[1], len = Math.hypot(dx, dy), nx = dy / len, ny = -dx / len;
+  const f = a => a.map(v => v.toFixed(1)).join(" ");
+  [-280, -190, -100, 100, 190, 280].forEach(k => {
+    const c1 = [P[0] + dx / 3 + nx * k, P[1] + dy / 3 + ny * k], c2 = [P[0] + 2 * dx / 3 + nx * k, P[1] + 2 * dy / 3 + ny * k];
+    const q0 = [(P[0] + c1[0]) / 2, (P[1] + c1[1]) / 2], q1 = [(c1[0] + c2[0]) / 2, (c1[1] + c2[1]) / 2], q2 = [(c2[0] + Q[0]) / 2, (c2[1] + Q[1]) / 2];
+    const r0 = [(q0[0] + q1[0]) / 2, (q0[1] + q1[1]) / 2], r1 = [(q1[0] + q2[0]) / 2, (q1[1] + q2[1]) / 2], m = [(r0[0] + r1[0]) / 2, (r0[1] + r1[1]) / 2];
+    FL.push(mk("path", { d: `M${f(P)} C${f(q0)} ${f(r0)} ${f(m)} C${f(r1)} ${f(q2)} ${f(Q)}`, fill: "none", stroke: C.sand, "stroke-width": 3, "stroke-linecap": "round", opacity: 0 }, fieldG));
+  });
+}
+FL.forEach(p => p._L = p.getTotalLength());
+
+/* compasses */
+const compG = $("comp");
+const COMPS = [];
+COMPS.forEach(c => {
+  c.g = mk("g", { transform: `translate(${c.x} ${c.y})`, opacity: 0 }, compG);
+  mk("circle", { r: 24, fill: "#fffaf0", stroke: C.sand, "stroke-width": 2 }, c.g);
+  c.n = mk("g", {}, c.g);
+  mk("path", { d: "M0 -19 L6 0 L-6 0 Z", fill: C.clay }, c.n);
+  mk("path", { d: "M0 19 L6 0 L-6 0 Z", fill: "#8a7a66" }, c.n);
+  mk("circle", { r: 2.5, fill: "#fffaf0" }, c.g);
+});
+
+/* HV inset coils */
+const prim = [], sec = [];
+[145, 173, 201].forEach(y => prim.push(mk("ellipse", { cx: 604, cy: y, rx: 20, ry: 7, fill: "none", stroke: "#d98a52", "stroke-width": 6 }, $("prim"))));
+for(let i = 0; i < 13; i++) sec.push(mk("ellipse", { cx: 756, cy: 120 + i * 9, rx: 18, ry: 5, fill: "none", stroke: "#d98a52", "stroke-width": 2.5 }, $("sec")));
+
+/* ---------- comparison panels ---------- */
+const panelsG = $("panels");
+function panelBase(){
+  const g = mk("g", { opacity: 0 }, panelsG);
+  mk("rect", { x: 0, y: 0, width: 1200, height: 720, fill: "#efe6d3", "fill-opacity": .88 }, g);
+  mk("rect", { x: 40, y: 50, width: 1120, height: 620, rx: 30, fill: "#fffaf0", stroke: "#d8caaf", "stroke-width": 2 }, g);
+  return g;
+}
+function ladder(o){
+  const g = panelBase();
+  txt(g, 100, 118, o.title, { class: "f-disp", "font-size": 42, fill: C.ink });
+  txt(g, 100, 152, o.sub, { "font-size": 18, fill: C.muted });
+  const lmin = Math.log10(o.min), lmax = Math.log10(o.max);
+  const X = v => o.x0 + (Math.log10(v) - lmin) / (lmax - lmin) * (o.x1 - o.x0);
+  const n = Math.round(lmax - lmin);
+  for(let k = 0; k <= n; k++){
+    const x = o.x0 + k * (o.x1 - o.x0) / n;
+    mk("line", { x1: x, y1: o.y0 - 30, x2: x, y2: o.axisY, stroke: "#e6dac2", "stroke-width": 1 }, g);
+    txt(g, x, o.axisY + 24, o.ticks[k], { "font-size": 16, fill: C.muted, "text-anchor": "middle", class: "f-mono" });
+  }
+  mk("line", { x1: o.x0, y1: o.axisY, x2: o.x1, y2: o.axisY, stroke: C.muted, "stroke-width": 2 }, g);
+  txt(g, o.x1, o.axisY + 50, o.unit, { "font-size": 16, fill: C.muted, "text-anchor": "end" });
+  const rows = o.rows.map((r, i) => {
+    const y = o.y0 + i * o.dy;
+    const rg = mk("g", { opacity: 0 }, g);
+    if(r.hl) mk("rect", { x: 58, y: y - 27, width: 1084, height: 54, rx: 14, fill: r.hl, "fill-opacity": .12 }, rg);
+    mk("circle", { cx: 98, cy: y, r: 22, fill: "#2a241e" }, rg);
+    const ic = mk("g", { transform: `translate(98 ${y}) scale(.46)` }, rg); ic.innerHTML = ICON[r.icon];
+    txt(rg, 134, y - 3, r.name, { "font-size": 22, fill: C.ink, "font-weight": 500 });
+    txt(rg, 134, y + 21, r.txt, { "font-size": 16, fill: C.muted });
+    const bx0 = r.lo ? X(r.lo) : o.x0, bx1 = X(r.hi || r.val);
+    const bar = mk("rect", { x: bx0, y: y - 10, width: 0, height: 20, rx: 10, fill: r.color }, rg);
+    let tag = null;
+    if(r.tag){
+      tag = txt(rg, r.inside ? bx1 - 12 : bx1 + 12, y + 6, r.tag, { "font-size": 17, "font-weight": 700, fill: r.inside ? "#2c1409" : (r.tagColor || C.muted), "text-anchor": r.inside ? "end" : "start" });
+      op(tag, 0);
+    }
+    return { rg, bar, bx0, bx1, tag, y };
+  });
+  return { g, rows, X };
+}
+
+const VP = ladder({
+  title: "이 전압은 얼마나 셀까?", sub: "로그 눈금: 오른쪽으로 한 칸 갈 때마다 10배",
+  min: 1, max: 1e9, x0: 430, x1: 1090, y0: 196, dy: 52, axisY: 592, unit: "V (볼트)",
+  ticks: ["1", "10", "100", "1천", "1만", "10만", "100만", "1천만", "1억", "10억"],
+  rows: [
+    { icon: "battery", name: "18650 배터리", txt: "3.7 V", val: 3.7, color: C.sand },
+    { icon: "plug", name: "가정용 콘센트", txt: "220 V", val: 220, color: "#7d705f", tag: "사람도 감전사 위험", tagColor: "#d4412a" },
+    { icon: "eel", name: "전기뱀장어", txt: "최대 약 860 V", val: 860, color: "#7d705f", tag: "말도 쓰러뜨림", tagColor: C.gold },
+    { icon: "cow", name: "소 전기울타리", txt: "약 1만 V", val: 1e4, color: "#7d705f", tag: "소가 놀라 물러남", tagColor: C.sand },
+    { icon: "spark", name: "겨울철 정전기", txt: "최대 약 2만 5천 V", val: 2.5e4, color: "#7d705f", tag: "따끔, 무해", tagColor: C.sand },
+    { icon: "tower", name: "초고압 송전선", txt: "76만 5천 V", val: 7.65e5, color: "#7d705f", tag: "닿으면 즉사", tagColor: "#d4412a" },
+    { icon: "module", name: "모듈 표기값", txt: "100만 V (1000kV)", val: 1e6, color: C.gold, hl: C.gold, tag: "실제 추정: 수만 V", tagColor: "#a8730a" },
+    { icon: "bolt", name: "번개", txt: "1억 V 이상", val: 1e8, color: "#f3e8d2", tag: "소 떼도 쓰러뜨림", inside: true }
+  ]
+});
+const ghost = mk("rect", { x: VP.X(3e4), y: VP.rows[6].y - 16, width: VP.X(9e4) - VP.X(3e4), height: 32, rx: 8, fill: "#ffffff", "fill-opacity": .35, stroke: "#2b2118", "stroke-width": 2, "stroke-dasharray": "5 4" }, VP.rows[6].rg);
+op(ghost, 0);
+
+const MP = ladder({
+  title: "이 전기장은 얼마나 셀까?", sub: "로그 눈금: 한 칸에 10배 · 단위 V/m (전압 ÷ 거리)",
+  min: 10, max: 1e8, x0: 430, x1: 1090, y0: 206, dy: 66, axisY: 516, unit: "V/m",
+  ticks: ["10", "100", "1천", "1만", "10만", "100만", "1천만", "1억"],
+  rows: [
+    { icon: "globe", name: "맑은 날 지구 대기", txt: "약 100 V/m", val: 100, color: "#7d705f" },
+    { icon: "tower", name: "초고압 송전선(765kV) 아래", txt: "약 1만 V/m", val: 1e4, color: "#7d705f", tag: "형광등이 저절로 켜짐", tagColor: C.sand },
+    { icon: "bolt", name: "천둥구름 아래", txt: "약 10만 V/m", val: 1e5, color: "#7d705f", tag: "번개 직전", tagColor: "#d4412a" },
+    { icon: "spark", name: "공기가 견디는 한계", txt: "300만 V/m (3만 V/cm)", val: 3e6, color: C.gold, hl: C.gold, tag: "넘으면 불꽃", tagColor: "#a8730a" },
+    { icon: "module", name: "이 모듈 코일 끝 (추정)", txt: "수백만 V/m 이상", lo: 1e6, hi: 1e7, color: "url(#gRange)", hl: C.clay, tag: "불꽃이 튀는 이유", tagColor: C.clayHi }
+  ]
+});
+const mBox = mk("g", {}, MP.g); op(mBox, 0);
+mk("rect", { x: 80, y: 582, width: 1040, height: 72, rx: 18, fill: "#ffffff", stroke: C.clay, "stroke-width": 2 }, mBox);
+txt(mBox, 104, 612, "전기장 E ≈ 전압 V ÷ 거리 d    (수만 V가 1~3 cm 사이에 걸린다고 가정)", { "font-size": 19, fill: C.ink });
+txt(mBox, 104, 640, "→ 예) 3만 V ÷ 1 cm = 300만 V/m : 공기가 버티는 한계라서 불꽃이 튄다", { "font-size": 19, "font-weight": 700, fill: C.clayHi });
+
+/* elephant panel */
+const EP = panelBase();
+const elBolt = mk("path", { d: "M352 60 L300 190 L346 196 L286 318", stroke: "#f2a516", "stroke-width": 9, fill: "none", "stroke-linejoin": "round", filter: "url(#glow)" }, EP);
+const elBody = mk("g", {}, EP); elBody.innerHTML = ICON.elephant;
+const EL = [
+  txt(EP, 620, 182, "전압만 놓고 보면,", { "font-size": 28, fill: C.muted }),
+  txt(EP, 620, 236, "100만 V에 송전선처럼", { "font-size": 32, "font-weight": 700, fill: C.ink }),
+  txt(EP, 620, 280, "큰 전류까지 흐른다면", { "font-size": 32, "font-weight": 700, fill: C.ink }),
+  txt(EP, 620, 372, "6톤 코끼리도", { class: "f-disp", "font-size": 66, fill: C.danger }),
+  txt(EP, 620, 448, "단숨에 즉사", { class: "f-disp", "font-size": 66, fill: C.danger }),
+  txt(EP, 620, 506, "실제로 1만 V대 배전선에 닿아", { "font-size": 21, fill: C.muted }),
+  txt(EP, 620, 534, "코끼리가 감전사하는 사고가 일어난다.", { "font-size": 21, fill: C.muted }),
+  txt(EP, 620, 612, "그런데 이 모듈도 정말 그럴까?", { "font-size": 27, "font-weight": 700, fill: C.gold })
+];
+
+/* reality panel */
+const RP = panelBase();
+txt(RP, 100, 118, "진짜 위험을 정하는 건 전류", { class: "f-disp", "font-size": 42, fill: C.ink });
+txt(RP, 100, 152, "전압이 높아도 몸에 흐르는 전류가 작으면 치명적이지 않다", { "font-size": 18, fill: C.muted });
+const CX = v => 450 + (Math.log10(v) + 6) * 106.7;
+for(let k = 0; k <= 6; k++){
+  const x = 450 + k * 106.7;
+  mk("line", { x1: x, y1: 190, x2: x, y2: 346, stroke: "#e6dac2", "stroke-width": 1 }, RP);
+  txt(RP, x, 370, ["1μA", "10μA", "100μA", "1mA", "10mA", "100mA", "1A"][k], { "font-size": 16, fill: C.muted, "text-anchor": "middle", class: "f-mono" });
+}
+mk("line", { x1: 450, y1: 346, x2: 1090, y2: 346, stroke: C.muted, "stroke-width": 2 }, RP);
+const R1 = mk("g", {}, RP), R2 = mk("g", {}, RP);
+txt(R1, 100, 226, "심장이 멈출 수 있는 전류", { "font-size": 22, "font-weight": 500, fill: C.ink });
+txt(R1, 100, 252, "약 0.1 A (100 mA)", { "font-size": 16, fill: C.muted });
+const rb1 = mk("rect", { x: 450, y: 220, width: 0, height: 26, rx: 13, fill: C.danger }, R1);
+txt(R2, 100, 298, "이 모듈의 출력 전류", { "font-size": 22, "font-weight": 500, fill: C.ink });
+txt(R2, 100, 324, "수 μA (마이크로암페어)", { "font-size": 16, fill: C.muted });
+const rb2 = mk("rect", { x: 450, y: 292, width: 0, height: 26, rx: 13, fill: C.sand }, R2);
+const rRatio = txt(RP, CX(5e-6) + 16, 313, "약 2만 배 작다", { "font-size": 23, "font-weight": 700, fill: C.sand });
+const rCow = mk("g", {}, RP);
+[150, 440].forEach(x => mk("rect", { x: x - 5, y: 430, width: 10, height: 190, rx: 4, fill: "#8a6a44" }, rCow));
+const fenceW = [470, 520].map(y => mk("line", { x1: 150, y1: y, x2: 440, y2: y, stroke: "#8a7a66", "stroke-width": 3 }, rCow));
+mk("ellipse", { cx: 300, cy: 592, rx: 108, ry: 62, fill: "#e8dcc0" }, rCow);
+const cowI = mk("g", { transform: "translate(300 585) scale(1.7)" }, rCow); cowI.innerHTML = ICON.cow;
+const fenceZap = mk("polyline", { points: "", fill: "none", stroke: "#f2a516", "stroke-width": 3, filter: "url(#glow)" }, rCow);
+const ouch = txt(rCow, 196, 454, "따끔!", { class: "f-disp", "font-size": 34, fill: C.gold, "text-anchor": "middle" });
+const rT = [
+  txt(RP, 520, 470, "전압은 높지만 흐르는 전류와 에너지가 아주 작다.", { "font-size": 23, fill: C.ink }),
+  txt(RP, 520, 506, "그래서 소 전기울타리처럼 따끔한 정도에 그친다.", { "font-size": 23, fill: C.ink }),
+  txt(RP, 520, 572, "그래도 화상·근육 경련 위험, 심장 질환자는 특히 위험", { "font-size": 20, "font-weight": 700, fill: "#d4412a" }),
+  txt(RP, 520, 602, "사람과 동물에게 절대 대지 않는다.", { "font-size": 20, "font-weight": 700, fill: "#d4412a" })
+];
+[R1, R2, rRatio, rCow, ...rT].forEach(e => op(e, 0));
+
+/* spark panel: why air breaks down */
+const AP = panelBase();
+txt(AP, 100, 118, "왜 불꽃이 튈까?", { class: "f-disp", "font-size": 42, fill: C.ink });
+const dGap = mk("g", {}, AP);
+mk("rect", { x: 150, y: 170, width: 40, height: 250, rx: 12, fill: C.clay }, dGap);
+mk("rect", { x: 1010, y: 170, width: 40, height: 250, rx: 12, fill: "#8a7a66" }, dGap);
+txt(dGap, 170, 154, "+ 수만 V", { "font-size": 20, "font-weight": 700, fill: C.clayHi, "text-anchor": "middle" });
+txt(dGap, 1030, 154, "0 V", { "font-size": 20, "font-weight": 700, fill: C.muted, "text-anchor": "middle" });
+const dArrows = [0, 1, 2, 3, 4].map(i => mk("line", { x1: 215, y1: 205 + i * 40, x2: 985, y2: 205 + i * 40, stroke: C.sand, "stroke-width": 2.5, "stroke-dasharray": "10 9", "marker-end": "url(#mF)", opacity: 0 }, AP));
+const dMol = Array.from({ length: 30 }, (_, i) => mk("circle", { cx: 235 + rnd(i * 3 + 1) * 740, cy: 190 + rnd(i * 5 + 2) * 215, r: 7, fill: "#cdbfa6", opacity: 0 }, AP));
+const dEl = Array.from({ length: 10 }, () => mk("circle", { r: 5, fill: "#2b2118", opacity: 0 }, AP));
+const dSpark = mk("polyline", { points: "", fill: "none", stroke: "#f2a516", "stroke-width": 6, "stroke-linejoin": "round", "stroke-linecap": "round", filter: "url(#glow)", opacity: 0 }, AP);
+mk("rect", { x: 80, y: 470, width: 1040, height: 176, rx: 22, fill: "#ffffff", stroke: C.clay, "stroke-width": 2 }, AP);
+const dT = [
+  txt(AP, 112, 520, "① 전압이 높을수록 사이의 전기장이 세진다", { "font-size": 26, fill: C.ink }),
+  txt(AP, 112, 568, "② 공기 분자에서 전자가 뜯겨 나온다 (이온화)", { "font-size": 26, fill: C.ink }),
+  txt(AP, 112, 616, "③ 길이 뚫려 전류가 확 흐른다 = 불꽃", { "font-size": 26, "font-weight": 700, fill: C.clayHi })
+];
+[dGap, dT[0], dT[1], dT[2]].forEach(e => op(e, 0));
+
+/* ---------- static refs ---------- */
+const bench = $("bench"), tray = $("tray"), card = $("card"), tcard = $("tcard");
+const swLever = $("sw-lever"), swTxt = $("sw-txt"), swDot = $("sw-dot");
+const batGlow = $("bat-glow"), hvGlow = $("hv-glow"), coilGlow = $("coil-glow");
+const inset = $("inset"), meter = $("meter"), meterV = $("meterV");
+const check = $("check"), done = $("done"), nz = $("nz"), nzWave = $("nzWave"), nz1 = $("nz1"), nz2 = $("nz2"), nz3 = $("nz3");
+const hud = $("hud"), hTrack = $("hTrack"), hKnob = $("hKnob"), hPow = $("hPow"), hsBox = $("hsBox"), hsDot = $("hsDot"), hsTxt = $("hsTxt");
+const tcIn = $("tcIn"), tcL = $("tcL");
+
+function place(el, x, y, s, r, o){ el.setAttribute("transform", `translate(${x.toFixed(2)} ${y.toFixed(2)}) rotate(${r.toFixed(2)}) scale(${s.toFixed(4)})`); op(el, o); }
+
+function partState(k, T){
+  const P = PARTS[k], i = ORDER.indexOf(k);
+  const [lx, ly, ls] = P.layout, [tx, ty, ts] = P.tray, [sx, sy, ss] = P.show;
+  if(T < ST[1]){
+    const t = T - ST[0], a = 1.2 + i * 2.4;
+    if(t < a) return [1340, sy, ss, 10, 0];
+    const pin = eout(seg(t, a, a + .45)), pout = eio(seg(t, a + 1.85, a + 2.4));
+    if(pout <= 0) return [lerp(1340, sx, pin), sy, ss, lerp(10, 0, pin), pin];
+    return [lerp(sx, tx, pout), lerp(sy, ty, pout) - 70 * Math.sin(Math.PI * pout), lerp(ss, ts, pout), 0, 1];
+  }
+  if(k === "watch"){
+    if(T < ST[2]) return [tx, ty, ts, 0, 1 - seg(T - ST[1], 16.3, 17)];
+    if(T < ST[4]) return [lx, ly, ls, 0, 0];
+    const t5 = T - ST[4], p = seg(t5, .3, 1.7);
+    return [lx, lerp(-150, ly, eback(p)), lerp(1, 1.2, eio(seg(t5, 3, 5.8))), 0, seg(t5, .3, .8)];
+  }
+  if(T < ST[2]){
+    const t = T - ST[1];
+    const st = .6 + ({ bat: 0, sw: 1, hv: 2, coil: 3, kit: 4 })[k] * .8;
+    const p = seg(t, st, st + 1.4);
+    if(p <= 0) return [tx, ty, ts, 0, 1];
+    const e = eio(p);
+    return [lerp(tx, lx, e), lerp(ty, ly, e) - 130 * Math.sin(Math.PI * p), ts + (ls - ts) * eback(p), -28 * Math.sin(Math.PI * p), 1];
+  }
+  return [lx, ly, ls, 0, 1];
+}
+
+/* power, coil current, field and camera timelines */
+function lever(T){
+  const t3 = T - ST[2], t4 = T - ST[3], t5 = T - ST[4];
+  if(T < ST[2]) return 0;
+  if(T < ST[3]) return eio(seg(t3, .8, 1.3));
+  if(T < ST[4]) return 1 - eio(seg(t4, 44.8, 45.4));
+  return eio(seg(t5, 8, 8.35)) - eio(seg(t5, 21, 21.35));
+}
+function powerSince(T){
+  if(T >= ST[2] && T < ST[3] + 45.2) return ST[2] + 1.4;
+  if(T >= ST[4] + 8.2 && T < ST[4] + 21.4) return ST[4] + 8.35;
+  return null;
+}
+function coilInfo(T){
+  const t4 = T - ST[3], t5 = T - ST[4];
+  if(T >= ST[3] && T < ST[4]){
+    const t = t4 - .5; if(t < 0 || t4 > 45.5) return null;
+    const D = t < 18 ? t : t < 20 ? 18 - (t - 18) : 16 + (t - 20);
+    return { t, D, dir: (t >= 18 && t < 20) ? -1 : 1, a: 1 - seg(t4, 44.8, 45.4), r: seg(t, 2.5, 5.5) };
+  }
+  if(T >= ST[4]){
+    const t = t5 - 8.4; if(t < 0 || t5 > 21.6) return null;
+    return { t, D: t, dir: 1, a: 1 - seg(t5, 21, 21.5), r: seg(t, 0, .5) };
+  }
+  return null;
+}
+function fieldInfo(T){
+  const t4 = T - ST[3], t5 = T - ST[4];
+  if(T >= ST[3] && T < ST[4]) return { draw: t4 - 11.3, a: 1 - seg(t4, 44.6, 45.4) };
+  if(T >= ST[4]) return { draw: (t5 - 8.5) * 2.2, a: 1 - seg(t5, 21, 21.8) };
+  return null;
+}
+function camera(T){
+  const t4 = T - ST[3], t5 = T - ST[4];
+  if(T >= ST[3] && T < ST[4]){
+    const z = 1 + .07 * eio(seg(t4, 0, 14)) - .07 * eio(seg(t4, 44, 47.5));
+    return [760, 370, z, 760, 370];
+  }
+  if(T >= ST[4]){
+    const zp = eio(seg(t5, 3, 5.8));
+    return [lerp(600, 720, zp), lerp(370, 385, zp), lerp(1, 1.9, zp), lerp(600, 985, zp), 370];
+  }
+  return [600, 370, 1, 600, 370];
+}
+function coilPos(d){
+  if(d < LA){ const p = at(T_A, d); return [p[0], p[1], 1]; }
+  if(d < LA + LH) return helix((d - LA) / LH);
+  const p = at(T_C, Math.min(LC, d - LA - LH)); return [p[0], p[1], 1];
+}
+
+/* ---------- render ---------- */
+let lastCardIdx = -1, lastScene = -1, lastBeat = null, lastHs = "";
+const subG = $("sub");
+const subRect = mk("rect", { y: 20, height: 54, rx: 27, fill: "#fffaf0", "fill-opacity": .95, stroke: "#d8caaf", "stroke-width": 1.5 }, subG);
+const subTxt = txt(subG, 600, 56, "", { "font-size": 25, "font-weight": 700, fill: C.ink, "text-anchor": "middle" });
+const mgG = mk("g", { opacity: 0 }, subG.parentNode); subG.parentNode.insertBefore(mgG, subG);
+mk("rect", { x: 80, y: 640, width: 1040, height: 50, rx: 25, fill: "#fffaf0", "fill-opacity": .96, stroke: "#d8caaf", "stroke-width": 1.5 }, mgG);
+txt(mgG, 600, 672, "전류가 코일을 돌면 자기장도 생기지만 아주 약합니다 (최대 약 24 μT, 지구 자기장의 절반 이하)", { "font-size": 21, "font-weight": 500, fill: C.ink, "text-anchor": "middle" });
+function setSub(t){ subTxt.textContent = t; const w = estW(t, 25) + 56; subRect.setAttribute("x", (600 - w / 2).toFixed(1)); subRect.setAttribute("width", w.toFixed(1)); }
+
+function render(T){
+  const t1 = T - ST[0], t2 = T - ST[1], t3 = T - ST[2], t4 = T - ST[3], t5 = T - ST[4];
+  const si = sceneAt(T);
+  const noDots = T >= ST[4];  /* watch test: hide the moving current dots */
+
+  /* camera */
+  const cam = camera(T);
+  bench.setAttribute("transform", `translate(${cam[0].toFixed(2)} ${cam[1].toFixed(2)}) scale(${cam[2].toFixed(4)}) translate(${-cam[3]} ${-cam[4]})`);
+
+  /* parts */
+  ORDER.forEach(k => { const s = partState(k, T); place(PARTS[k].el, s[0], s[1], s[2], s[3], s[4]); });
+  op(tray, T < ST[1] ? seg(t1, 3.0, 3.4) : 1 - seg(t2, 16.3, 17));
+  const wk = watchKind(T);
+  renderWatch(T, wk);
+
+  /* scene 1 info card */
+  let cOp = 0, cs = 1;
+  if(T < ST[1] && t1 >= 1.2){
+    const i = Math.min(5, Math.floor((t1 - 1.2) / 2.4)), u = t1 - 1.2 - 2.4 * i;
+    cOp = fade(u, .3, .65, 1.85, 2.2);
+    cs = lerp(.94, 1, eout(seg(u, .3, .65)));
+    if(i !== lastCardIdx){
+      lastCardIdx = i; const c = CARDS[i];
+      $("cIdx").textContent = `${c.cat}`;
+      $("cName").textContent = c.name; $("cSpec").textContent = c.spec;
+      [0, 1, 2].forEach(j => $("cU" + j).textContent = c.use[j] || "");
+      cDotEls.forEach((d, j) => d.setAttribute("fill", j === i ? C.clay : (j < i ? "#cfa77f" : "#d8caaf")));
+    }
+  }
+  card.setAttribute("transform", `translate(895 387) scale(${cs.toFixed(3)}) translate(-895 -387)`);
+  op(card, cOp);
+
+  /* wires */
+  WIRES.forEach(w => {
+    const p = T < ST[1] ? 0 : T < ST[2] ? eio(seg(t2, w.draw[0], w.draw[1])) : 1;
+    [w.outer, w.inner].forEach(e => { e.setAttribute("stroke-dasharray", `${w.L} ${w.L}`); e.setAttribute("stroke-dashoffset", (w.L * (1 - p)).toFixed(2)); });
+    op(w.g, p > 0 ? 1 : 0);
+  });
+
+  /* scene 2: snaps, scan, check */
+  SNAPS.forEach(s => {
+    const p = (T >= ST[1] && T < ST[2]) ? seg(t2, s.t, s.t + .6) : 0;
+    if(p > 0 && p < 1){ s.el.setAttribute("r", (10 + 50 * p).toFixed(1)); op(s.el, 1 - p); } else op(s.el, 0);
+  });
+  WIRES.forEach((w, j) => {
+    const a = 17.5 + j * .4, p = (T >= ST[1] && T < ST[2]) ? seg(t2, a, a + 1.4) : 0;
+    if(p > 0 && p < 1){ w.scan.setAttribute("stroke-dasharray", `44 ${w.L + 60}`); w.scan.setAttribute("stroke-dashoffset", (44 - p * (w.L + 44)).toFixed(1)); op(w.scan, .95); } else op(w.scan, 0);
+  });
+  op(check, T >= ST[1] && T < ST[2] ? fade(t2, 19, 19.4, 21.5, 21.9) : 0);
+  op(done, T >= ST[1] && T < ST[2] ? fade(t2, 20.5, 20.9, 21.5, 21.95) : 0);
+
+  /* switch + power */
+  const lev = lever(T);
+  swLever.setAttribute("transform", `rotate(${lerp(-30, 30, lev).toFixed(1)} 0 -28)`);
+  swTxt.textContent = lev > .5 ? "ON" : "OFF";
+  swTxt.setAttribute("fill", lev > .5 ? "#f09b74" : "#a89c8a");
+  swDot.setAttribute("fill", mix("#3d352c", "#f09b74", lev));
+  const since = powerSince(T);
+  const flowT = since == null ? -1 : T - since;
+  op(batGlow, .55 * lev);
+  poolIn.forEach((c, k) => {
+    const d = flowT >= 0 ? flowT * 240 - k * GAP_IN : -1;
+    if(d < 0){ op(c, 0); return; }
+    const p = at(T_IN, d % L_IN); c.setAttribute("cx", p[0].toFixed(1)); c.setAttribute("cy", p[1].toFixed(1)); op(c, noDots ? 0 : lev);
+  });
+  poolRet.forEach((c, k) => {
+    const d = flowT >= 0 ? (flowT - 2.2) * 240 - k * GAP_RET : -1;
+    if(d < 0){ op(c, 0); return; }
+    const p = at(T_RET, d % L_RET); c.setAttribute("cx", p[0].toFixed(1)); c.setAttribute("cy", p[1].toFixed(1)); op(c, noDots ? 0 : .8 * lev);
+  });
+  op(hvGlow, flowT >= 0 ? seg(flowT, 2.2, 3.2) * (.35 + .25 * Math.sin(T * 26)) * lev : 0);
+  op(lblCur, fade(t3, 3, 3.5, 18.5, 19));
+  op(lblRet, fade(t3, 4.5, 5, 18.5, 19));
+
+  /* HV inset + meter (scene 3) */
+  op(inset, fade(t3, 9, 9.5, 14.6, 15.1));
+  if(t3 > 9 && t3 < 15.2){
+    const pulse = Math.floor(T * 10) % 2 === 0;
+    prim.forEach(e => e.setAttribute("stroke", pulse ? C.clayHi : "#d98a52"));
+    sec.forEach(e => e.setAttribute("stroke", pulse ? C.gold : "#8a5a33"));
+  }
+  op(meter, fade(t3, 15, 15.4, 19.1, 19.5));
+  if(t3 >= 15 && t3 < 19.6){
+    const v = 3.7 * Math.pow(1e6 / 3.7, eio(seg(t3, 15.3, 18)));
+    meterV.textContent = (v < 100 ? v.toFixed(1) : Math.round(v).toLocaleString("ko-KR")) + " V";
+  }
+
+  /* zaps around the module */
+  const zapOn = (t3 > 15.5 && t3 < 19.2) || (t4 > 0 && t4 < 3.5) || (t5 > 8.35 && t5 < 10.2 && T >= ST[4]);
+  const zs = Math.floor(T * 16);
+  zaps.forEach((zp2, i) => {
+    if(!zapOn || rnd(zs * 3 + i) < .35){ op(zp2, 0); return; }
+    const y1 = 322 + rnd(zs + i * 11) * 100, ang = -1.1 + rnd(zs + i * 5) * 2.2, len = 40 + rnd(zs + i * 9) * 50;
+    zp2.setAttribute("points", zapPts(680, y1, 680 + Math.cos(ang) * len, y1 + Math.sin(ang) * len, zs * 13 + i, 6, 9));
+    op(zp2, .95);
+  });
+
+  /* voltage ladder */
+  op(VP.g, fade(t3, 19, 19.6, 30.6, 31.1));
+  VP.rows.forEach((r, i) => {
+    const a = 19.6 + i * 1.15;
+    op(r.rg, seg(t3, a, a + .3));
+    r.bar.setAttribute("width", ((r.bx1 - r.bx0) * eout(seg(t3, a, a + .9))).toFixed(1));
+    if(r.tag) op(r.tag, seg(t3, i === 6 ? 29.5 : a + .7, i === 6 ? 30 : a + 1));
+  });
+  op(ghost, seg(t3, 29.5, 30));
+
+  /* elephant */
+  op(EP, fade(t3, 31, 31.5, 36.6, 37.1));
+  if(t3 > 31 && t3 < 37.2){
+    const flash = t3 > 31.8 && t3 < 35 && rnd(Math.floor(T * 10)) > .4;
+    op(elBolt, flash ? 1 : .08);
+    const sh = flash ? Math.sin(T * 70) * 4 : 0;
+    elBody.setAttribute("transform", `translate(${330 + sh} 420) scale(3.4)`);
+    const at = [31.6, 32.2, 32.4, 33, 33.3, 34, 34.2, 35.5];
+    EL.forEach((e, i) => op(e, seg(t3, at[i], at[i] + .4)));
+  }
+
+  /* reality */
+  op(RP, fade(t3, 37, 37.5, 45.6, 46.1));
+  if(t3 > 37 && t3 < 46.2){
+    op(R1, seg(t3, 37.8, 38.1)); rb1.setAttribute("width", ((CX(.1) - 450) * eout(seg(t3, 38, 39.2))).toFixed(1));
+    op(R2, seg(t3, 39.3, 39.6)); rb2.setAttribute("width", ((CX(5e-6) - 450) * eout(seg(t3, 39.5, 40.7))).toFixed(1));
+    op(rRatio, seg(t3, 41, 41.4));
+    op(rCow, seg(t3, 41.8, 42.2));
+    const zf = t3 > 42.2 && rnd(Math.floor(T * 12)) > .45;
+    fenceZap.setAttribute("points", zf ? zapPts(176, 470, 214, 520, Math.floor(T * 12), 5, 8) : "");
+    op(ouch, zf ? 1 : .35);
+    fenceW.forEach(l => l.setAttribute("stroke", zf ? "#f2a516" : "#8a7a66"));
+    rT.forEach((e, i) => op(e, seg(t3, [42, 42.4, 42.8, 43.1][i], [42, 42.4, 42.8, 43.1][i] + .4)));
+  }
+
+  /* coil current, glow */
+  const cp = coilInfo(T);
+  poolCoil.forEach((c, k) => {
+    if(!cp){ op(c, 0); return; }
+    let d = cp.D * 480 - k * GAP_COIL;
+    if(cp.t < 12 && d < 0){ op(c, 0); return; }
+    d = ((d % L_COIL) + L_COIL) % L_COIL;
+    const p = coilPos(d);
+    c.setAttribute("cx", p[0].toFixed(1)); c.setAttribute("cy", p[1].toFixed(1));
+    const front = p[2] >= 0;
+    c.setAttribute("r", front ? 6 : 4);
+    op(c, noDots ? 0 : (front ? 1 : .4) * cp.a);
+  });
+  op(coilGlow, cp ? cp.r * cp.a * (.3 + .22 * Math.abs(Math.sin(T * 11))) : 0);
+  op(lblHV, fade(t4, .4, .9, 10.5, 11));
+
+  /* field lines */
+  const fi = fieldInfo(T);
+  const dir = cp ? cp.dir : 1, D = cp ? cp.D : 0;
+  FL.forEach((pth, j) => {
+    if(!fi || fi.a <= 0){ op(pth, 0); return; }
+    const L = pth._L, p = seg(fi.draw, j * .22, 1.5 + j * .22);
+    if(p <= 0){ op(pth, 0); return; }
+    if(p < 1){
+      pth.setAttribute("stroke-dasharray", `${L} ${L}`); pth.setAttribute("stroke-dashoffset", (L * (1 - eio(p))).toFixed(1));
+      pth.removeAttribute("marker-mid"); op(pth, .85 * fi.a);
+    } else {
+      pth.setAttribute("stroke-dasharray", "16 12"); pth.setAttribute("stroke-dashoffset", (-D * 55).toFixed(1));
+      pth.setAttribute("marker-mid", dir > 0 ? "url(#mF)" : "url(#mR)");
+      op(pth, (T >= ST[4] ? .42 + .25 * Math.abs(Math.sin(T * 9)) : .6 + .3 * Math.abs(Math.sin(T * 9))) * fi.a);
+    }
+  });
+  const flipP = (T >= ST[3] && T < ST[4]) ? eio(seg(t4, 18.5, 18.9)) - eio(seg(t4, 20.5, 20.9)) : 0;
+  const nsOp = (T >= ST[3] && T < ST[4]) ? fade(t4, 13, 13.5, 44, 44.6) : 0;
+  op(lblN.g, nsOp); op(lblS.g, nsOp);
+  lblN.t.textContent = flipP > .5 ? "−" : "+"; lblS.t.textContent = flipP > .5 ? "+" : "−";
+  lblN.c.setAttribute("fill", flipP > .5 ? C.sand : C.clay); lblS.c.setAttribute("fill", flipP > .5 ? C.clay : C.sand);
+  COMPS.forEach(c => {
+    const vis = (T >= ST[3] && T < ST[4]) ? fade(t4, 10.5, 11, 44, 44.6) : 0;
+    op(c.g, vis);
+    const a = lerp(150, c.a, eio(seg(t4, 12.5, 14))) + 180 * flipP;
+    c.n.setAttribute("transform", `rotate(${a.toFixed(1)})`);
+  });
+
+  /* magnetic ladder */
+  const inS4 = T >= ST[3] && T < ST[4];
+  op(MP.g, inS4 ? fade(t4, 22, 22.6, 35.6, 36.1) : 0);
+  MP.rows.forEach((r, i) => {
+    const a = 22.8 + i * 1.3;
+    op(r.rg, inS4 ? seg(t4, a, a + .3) : 0);
+    r.bar.setAttribute("width", ((r.bx1 - r.bx0) * (inS4 ? eout(seg(t4, a, a + .9)) : 0)).toFixed(1));
+    if(r.tag) op(r.tag, inS4 ? seg(t4, a + .7, a + 1) : 0);
+  });
+  op(mBox, inS4 ? seg(t4, 31.5, 32) : 0);
+
+  op(mgG, inS4 ? fade(t4, 12.6, 13.1, 21.4, 21.9) : 0);
+
+  /* spark panel */
+  op(AP, inS4 ? fade(t4, 36, 36.5, 43.8, 44.4) : 0);
+  if(inS4 && t4 > 36){
+    op(dGap, seg(t4, 36.5, 36.9));
+    dArrows.forEach((l, i) => { l.setAttribute("stroke-dashoffset", (-T * 40).toFixed(1)); op(l, seg(t4, 36.7 + i * .1, 37.1 + i * .1)); });
+    const ion = seg(t4, 38.4, 38.8);
+    dMol.forEach((m, i) => { op(m, seg(t4, 37, 37.4)); m.setAttribute("fill", i < 10 ? mix("#cdbfa6", "#d97757", ion) : "#cdbfa6"); });
+    dEl.forEach((e, i) => {
+      const m = dMol[i]; let x = parseFloat(m.getAttribute("cx")) - 170 * Math.max(0, t4 - 38.4);
+      while(x < 215) x += 770;
+      e.setAttribute("cx", x.toFixed(1)); e.setAttribute("cy", m.getAttribute("cy")); op(e, ion);
+    });
+    const sp = t4 > 40.6 && t4 < 43.8 && rnd(Math.floor(T * 14)) > .25;
+    dSpark.setAttribute("points", sp ? zapPts(190, 300, 1010, 300, Math.floor(T * 14) * 7, 14, 28) : "");
+    op(dSpark, sp ? 1 : 0);
+    op(dT[0], seg(t4, 36.6, 37)); op(dT[1], seg(t4, 38.4, 38.8)); op(dT[2], seg(t4, 40.6, 41));
+  }
+
+  /* scene 5: EMI waves, HUD, explanation card */
+  const s5on = T >= ST[4];
+  emi.forEach((e, i) => {
+    const active = s5on && t5 > 8.4 && t5 < 21.6;
+    if(!active){ op(e, 0); return; }
+    const p = ((t5 - 8.4) * .9 + i / 3) % 1;
+    e.setAttribute("rx", lerp(80, 380, p).toFixed(1)); e.setAttribute("ry", lerp(130, 300, p).toFixed(1));
+    op(e, (1 - p) * .55 * (1 - seg(t5, 21, 21.6)));
+  });
+  op(hud, s5on ? seg(t5, 3, 3.6) : 0);
+  hTrack.setAttribute("fill", mix("#cfc2a8", "#d97757", lev));
+  hKnob.setAttribute("cx", lerp(65, 103, lev).toFixed(1));
+  hPow.textContent = lev > .5 ? "전원 ON" : "전원 OFF";
+  hPow.setAttribute("fill", lev > .5 ? C.clayHi : C.muted);
+  let hs = "ok";
+  if(wk === "glitch") hs = "bad"; else if(wk === "blank" || wk === "test") hs = "boot"; else if(s5on && t5 >= 22.9) hs = "fixed";
+  if(hs !== lastHs){
+    lastHs = hs;
+    const m = { ok: ["정상 작동", C.sand], bad: ["화면 이상!", C.danger], boot: ["다시 시작 중", C.gold], fixed: ["복구 완료", C.sand] }[hs];
+    hsTxt.textContent = m[0]; hsTxt.setAttribute("fill", m[1]); hsDot.setAttribute("fill", m[1]); hsBox.setAttribute("stroke", m[1]);
+  }
+  op(nz, s5on ? fade(t5, 12, 12.6, 19.8, 20.4) : 0);
+  if(s5on && t5 > 12 && t5 < 20.5){
+    op(nz1, seg(t5, 12.4, 12.9)); op(nz2, seg(t5, 14, 14.5)); op(nz3, seg(t5, 16.4, 16.9));
+    const N = 56, pts = [];
+    for(let i = 0; i <= N; i++){
+      const spike = (rnd(Math.floor(T * 22) * 97 + i) - .5) * (i % 6 === 0 ? 70 : 24);
+      const y = 402 + clamp(14 * Math.sin(i * .55 + T * 12) + spike, -36, 36);
+      pts.push(`${(76 + i * (320 / N)).toFixed(1)},${y.toFixed(1)}`);
+    }
+    nzWave.setAttribute("points", pts.join(" "));
+  }
+
+  /* scene title card */
+  const sc = SCENES[si], tl = T - sc.start;
+  if(si !== lastScene){ lastScene = si; $("tcK").textContent = "PART " + (si + 1); $("tcN").textContent = sc.card; }
+  const tco = si === 0 ? fade(tl, -1, 0, 1.0, 1.5) : fade(tl, 0, .2, .85, 1.1);
+  op(tcard, tco);
+  tcIn.setAttribute("transform", `translate(0 ${lerp(26, 0, eout(seg(tl, 0, .6))).toFixed(1)})`);
+  const lw = 180 * eout(seg(tl, .15, .8));
+  tcL.setAttribute("x", (600 - lw / 2).toFixed(1)); tcL.setAttribute("width", lw.toFixed(1));
+
+  /* subtitle */
+  let b = sc.beats[0];
+  for(const x of sc.beats) if(tl >= x.t) b = x;
+  if(b !== lastBeat){ lastBeat = b; setSub(b.title); }
+
+  /* UI */
+  scrub.value = R.toFixed(1);
+  clock.textContent = `${fmt(R)} / ${fmt(TOTAL_R)}`;
+}
+function fmt(s){ s = Math.floor(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+
+/* ---------- controls ---------- */
+const scrub = $("scrub"), clock = $("clock"), playBtn = $("play"), playTxt = $("playTxt"), playIcon = $("playIcon");
+/* time warp: script time -> real playback time, so slow stretches are cut short (segments are [script s, real s]) */
+const SEGS = [[15.6, 14],
+  [1.1, .8], [4.9, 2.5], [8.4, 4.2], [3.1, 1.2], [4.5, 2.6],
+  [1.1, .8], [7.9, 3.2], [6, 2.8], [4.5, 3], [11.5, 11], [6, 5], [9, 7.5],
+  [1.1, .8], [9.9, 4.2], [11, 6.5], [14, 12], [8.4, 7], [3.6, 1.6],
+  [1.1, .8], [6.9, 3.2], [13.3, 6.6], [5.6, 3.2], [7.1, 2.6]];
+const WS = [0], WR = [0];
+SEGS.forEach(g => { WS.push(WS[WS.length - 1] + g[0]); WR.push(WR[WR.length - 1] + g[1]); });
+const TOTAL_R = WR[WR.length - 1];
+function warp(x, A, B){ if(x <= 0) return 0; if(x >= A[A.length - 1]) return B[B.length - 1]; let i = 0; while(A[i + 1] < x) i++; return B[i] + (x - A[i]) / (A[i + 1] - A[i]) * (B[i + 1] - B[i]); }
+const R2S = r => warp(r, WR, WS), S2R = t => warp(t, WS, WR);
+scrub.max = TOTAL_R;
+let R = 0, T = 0, playing = false, lastTs = null;
+function sync(){ T = R2S(R); render(T); }
+function setPlaying(v){
+  playing = v;
+  if(v && R >= TOTAL_R - .01) R = 0;
+  const ended = !v && R >= TOTAL_R - .01;
+  playTxt.textContent = v ? "일시정지" : (ended ? "다시 보기" : "재생");
+  playBtn.setAttribute("aria-label", playTxt.textContent);
+  playIcon.setAttribute("d", v ? "M2.5 1.5 H5.5 V12.5 H2.5 Z M8.5 1.5 H11.5 V12.5 H8.5 Z" : "M3 1.5 L12 7 L3 12.5 Z");
+  lastTs = null;
+  if(typeof wake === "function" && typeof idleT !== "undefined") wake();
+}
+let fAvg = 16.7, fN = 0, lite = false;
+function frame(ts){
+  if(playing){
+    if(lastTs != null){
+      const dt = ts - lastTs;
+      R = Math.min(TOTAL_R, R + Math.min(.1, dt / 1000));
+      fAvg = fAvg * .92 + dt * .08;
+      if(++fN > 60 && fAvg > 26 && !lite){ lite = true; $("svg").classList.add("lite"); }
+    }
+    lastTs = ts;
+    if(R >= TOTAL_R){ R = TOTAL_R; setPlaying(false); }
+    sync();
+  } else renderWatch(T, watchKind(T));
+  requestAnimationFrame(frame);
+}
+playBtn.addEventListener("click", () => setPlaying(!playing));
+scrub.addEventListener("input", () => { R = parseFloat(scrub.value) || 0; if(!playing) setPlaying(false); sync(); });
+document.addEventListener("keydown", e => {
+  if(e.target && (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON") && e.key === " ") return;
+  if(e.key === " "){ e.preventDefault(); setPlaying(!playing); }
+  else if(e.key === "ArrowRight" && e.target.tagName !== "INPUT"){ R = Math.min(TOTAL_R, R + 3); sync(); }
+  else if(e.key === "ArrowLeft" && e.target.tagName !== "INPUT"){ R = Math.max(0, R - 3); sync(); }
+});
+
+/* fullscreen: native API when allowed, otherwise a viewport-filling mode; portrait phones can rotate the stage */
+const playerEl = $("player"), fsBtn = $("fs"), rotBtn = $("rot"), fsIcon = $("fsIcon"), fsTxt = $("fsTxt");
+const FS_ON = "M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4", FS_OFF = "M6 2v4H2M14 6h-4V2M10 14v-4h4M2 10h4v4";
+let isFull = false, rotPref = null, nativeSeen = false;
+function applyRot(){
+  const portrait = window.innerHeight > window.innerWidth;
+  playerEl.classList.toggle("rot", isFull && (rotPref === null ? portrait : rotPref));
+  rotBtn.hidden = !isFull;
+}
+let idleT = null;
+function wake(){
+  playerEl.classList.remove("idle"); clearTimeout(idleT);
+  if(isFull && playing) idleT = setTimeout(() => playerEl.classList.add("idle"), 2500);
+}
+["pointerdown", "pointermove", "keydown", "touchstart"].forEach(ev => playerEl.addEventListener(ev, wake, { passive: true }));
+function setFull(v){
+  isFull = v; fN = 0; fAvg = 16.7;
+  playerEl.classList.toggle("full", v);
+  document.documentElement.classList.toggle("lock", v);
+  fsIcon.setAttribute("d", v ? FS_OFF : FS_ON);
+  fsTxt.textContent = v ? "나가기" : "전체화면";
+  fsBtn.setAttribute("aria-label", fsTxt.textContent);
+  if(v){
+    try { const r = playerEl.requestFullscreen && playerEl.requestFullscreen(); if(r && r.catch) r.catch(() => {}); } catch(e){}
+  } else {
+    rotPref = null; nativeSeen = false;
+    try { if(document.fullscreenElement){ const r = document.exitFullscreen(); if(r && r.catch) r.catch(() => {}); } } catch(e){}
+  }
+  applyRot(); wake();
+}
+fsBtn.addEventListener("click", () => setFull(!isFull));
+rotBtn.addEventListener("click", () => { rotPref = !playerEl.classList.contains("rot"); applyRot(); });
+document.addEventListener("fullscreenchange", () => { if(document.fullscreenElement) nativeSeen = true; else if(isFull && nativeSeen) setFull(false); });
+window.addEventListener("resize", applyRot);
+document.addEventListener("keydown", e => { if(e.key === "Escape" && isFull) setFull(false); });
+
+window.__anim = { seek(t){ R = S2R(t); sync(); }, total: TOTAL_R, starts: ST, script: TOTAL };
+
+sync();
+let reduce = false;
+try { reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch(e){}
+setPlaying(!reduce);
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>

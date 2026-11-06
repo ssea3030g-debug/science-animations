@@ -1,0 +1,1018 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>간이 전동기 원리</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Noto+Sans+KR:wght@400;500;700;800&display=swap">
+</head>
+<body>
+<style>
+/* One beige stage + one transport bar (play, seek, time, fullscreen). Palette = Claude clay orange + ochre/kraft. */
+:root{
+  --bg:#f2eadb; --surface:#fbf6ea; --surface-2:#efe5d0; --line:#d8caaf;
+  --ink:#2b2118; --muted:#7a6a58; --clay:#d97757; --clay-hi:#f09b74; --sand:#a9772e; --kraft:#c9976b;
+  --f-body:"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+html,body{background:var(--bg);color:var(--ink);margin:0}
+body{font-family:var(--f-body);font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased}
+.page{max-width:1120px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px;min-height:100svh;box-sizing:border-box;display:grid;align-content:center}
+.rig{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.stage{border-radius:22px;overflow:hidden;border:1px solid var(--line);background:#ece2cd;box-shadow:0 30px 60px -36px rgba(90,60,20,.35)}
+.stage svg{display:block;width:100%;height:auto}
+svg text{font-family:var(--f-body)}
+.f-disp{font-weight:800;letter-spacing:-.01em}
+.f-mono{font-family:var(--f-mono)}
+.bar{min-width:0;display:flex;align-items:center;gap:10px;flex-wrap:nowrap;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:10px 12px}
+.btn{white-space:nowrap;font:inherit;font-size:15px;font-weight:500;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:8px 16px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;line-height:1.2}
+.btn:hover{border-color:var(--kraft)}
+.btn.primary{background:var(--clay);border-color:var(--clay);color:#2b1308;font-weight:700;min-width:124px;justify-content:center}
+.btn.primary:hover{background:var(--clay-hi);border-color:var(--clay-hi)}
+.btn svg{width:14px;height:14px;fill:currentColor}
+.btn.icon{padding:8px 12px;flex:none}
+.btn.icon svg{width:16px;height:16px}
+html.lock,html.lock body{overflow:hidden}
+.player.full{position:fixed;inset:0;z-index:50;background:var(--bg);padding:max(8px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) max(8px,env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
+.player.full .rig{position:relative;height:100%;display:flex;flex-direction:column;justify-content:center;gap:10px}
+.player.full .bar{position:absolute;left:12px;right:12px;bottom:max(10px,env(safe-area-inset-bottom,0px));z-index:2;background:rgba(251,246,234,.97);transition:opacity .25s}
+.player.full.idle .bar{opacity:0;pointer-events:none}
+.player.full .stage{flex:1 1 auto;min-height:0;display:flex;border-radius:0;border:0;box-shadow:none;background:transparent}
+.player.full .stage svg{width:100%;height:100%}
+.player.full.rot{padding:0}
+.player.full.rot .rig{position:absolute;top:0;left:0;width:100vh;height:100vw;box-sizing:border-box;padding:8px 12px;transform-origin:0 0;transform:translateX(100vw) rotate(90deg)}
+svg.lite [filter]{filter:none}
+.scrub{flex:1 1 120px;min-width:60px;accent-color:var(--clay)}
+.clock{white-space:nowrap;font-family:var(--f-mono);font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:96px;text-align:right}
+.btn[hidden]{display:none}
+.btn.on{background:var(--clay);border-color:var(--clay);color:#2b1308}
+:focus-visible{outline:2px solid var(--sand);outline-offset:2px}
+@media (max-width:600px){
+  .bar{padding:8px 10px;gap:8px}
+  .clock{min-width:0;font-size:12px}
+  .btn.primary{min-width:0;padding:10px 16px}
+  .btn.icon .t{display:none}
+  #playTxt{display:none}
+}
+</style>
+
+<div class="page">
+  <section class="player" id="player" aria-label="애니메이션 플레이어">
+   <div class="rig">
+    <div class="stage">
+      <svg id="svg" viewBox="0 0 1200 720" role="img" aria-label="건전지, 에나멜선 코일, 자석, 금속 받침대로 만드는 간이 전동기의 원리 설명 애니메이션">
+        <defs>
+          <pattern id="dots" width="36" height="36" patternUnits="userSpaceOnUse"><circle cx="18" cy="18" r="1.4" fill="#d9cbb0"/></pattern>
+          <radialGradient id="glowA" cx="50%" cy="62%" r="55%"><stop offset="0" stop-color="#d97757" stop-opacity=".12"/><stop offset="1" stop-color="#d97757" stop-opacity="0"/></radialGradient>
+          <radialGradient id="glowB" cx="86%" cy="20%" r="45%"><stop offset="0" stop-color="#ffffff" stop-opacity=".5"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>
+          <linearGradient id="gBat" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4a47f"/><stop offset=".45" stop-color="#d97757"/><stop offset="1" stop-color="#a8543a"/></linearGradient>
+          <linearGradient id="gMag" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6b665e"/><stop offset="1" stop-color="#2f2c28"/></linearGradient>
+          <linearGradient id="gMetal" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8f8270"/><stop offset=".5" stop-color="#d8ccb6"/><stop offset="1" stop-color="#8f8270"/></linearGradient>
+          <radialGradient id="gGlowO"><stop offset="0" stop-color="#f09b74" stop-opacity=".8"/><stop offset=".55" stop-color="#f09b74" stop-opacity=".3"/><stop offset="1" stop-color="#f09b74" stop-opacity="0"/></radialGradient>
+          <radialGradient id="gHeat"><stop offset="0" stop-color="#ee5b3d" stop-opacity=".55"/><stop offset="1" stop-color="#ee5b3d" stop-opacity="0"/></radialGradient>
+          <marker id="mS" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M1 1 L9 5 L1 9 Z" fill="#a9772e"/></marker>
+          <marker id="mC" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M1 1 L9 5 L1 9 Z" fill="#cf5a33"/></marker>
+          <marker id="mK" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M1 1 L9 5 L1 9 Z" fill="#2b2118"/></marker>
+          <marker id="mM" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto"><path d="M1 1 L9 5 L1 9 Z" fill="#7a6a58"/></marker>
+        </defs>
+
+        <rect width="1200" height="720" fill="#ece2cd"/>
+        <rect width="1200" height="720" fill="url(#dots)"/>
+        <rect width="1200" height="720" fill="url(#glowA)"/>
+        <rect width="1200" height="720" fill="url(#glowB)"/>
+
+        <g id="tray" opacity="0">
+          <rect x="40" y="585" width="1120" height="112" rx="26" fill="#f7f0e0" stroke="#d9cbb0" stroke-width="2"/>
+          <text x="66" y="613" font-size="16" font-weight="700" fill="#8a7a66" letter-spacing="2">준비물</text>
+        </g>
+
+        <g id="bench">
+          <g id="fieldF"></g>
+
+          <!-- battery holder -->
+          <g id="p-hold">
+            <ellipse cx="0" cy="60" rx="210" ry="10" fill="#3a2410" opacity=".12"/>
+            <rect x="-202" y="-6" width="404" height="60" rx="12" fill="#2d2721" stroke="#4b4036" stroke-width="1.5"/>
+            <rect x="-202" y="-52" width="28" height="106" rx="9" fill="#3a322b"/>
+            <rect x="174" y="-52" width="28" height="106" rx="9" fill="#3a322b"/>
+            <path d="M-174 -18 l6 6 -6 6 6 6 -6 6 6 6" stroke="#cdbfa6" stroke-width="3" fill="none"/>
+            <rect x="168" y="-16" width="6" height="32" rx="2" fill="#cdbfa6"/>
+            <text x="-150" y="40" font-size="22" font-weight="800" fill="#e8dcc4" text-anchor="middle">−</text>
+            <text x="150" y="40" font-size="22" font-weight="800" fill="#f09b74" text-anchor="middle">+</text>
+          </g>
+
+          <!-- AA battery -->
+          <g id="p-bat">
+            <rect x="-174" y="-40" width="348" height="80" rx="16" fill="url(#gBat)" stroke="#8a3f26" stroke-width="1.5"/>
+            <rect x="-174" y="-40" width="60" height="80" rx="16" fill="#2f2924"/>
+            <rect x="-130" y="-40" width="16" height="80" fill="#2f2924"/>
+            <rect x="174" y="-13" width="11" height="26" rx="4" fill="#ddcbab"/>
+            <rect x="-110" y="-32" width="270" height="9" rx="4.5" fill="#fff" opacity=".22"/>
+            <text x="20" y="10" class="f-mono" font-size="26" font-weight="700" fill="#2c1409" text-anchor="middle">AA 1.5V</text>
+            <text x="148" y="11" font-size="30" font-weight="800" fill="#2c1409" text-anchor="middle">+</text>
+            <text x="-144" y="11" font-size="30" font-weight="800" fill="#e8dcc4" text-anchor="middle">−</text>
+          </g>
+
+          <!-- round magnet (front view of a disc) -->
+          <g id="p-mag">
+            <rect x="-52" y="-14" width="104" height="28" rx="5" fill="url(#gMag)" stroke="#24211e" stroke-width="1.5"/>
+            <rect x="-46" y="-11" width="92" height="4" rx="2" fill="#fff" opacity=".18"/>
+            <g id="magPole" opacity="0">
+              <text x="0" y="8" font-size="18" font-weight="800" fill="#f3c9a8" text-anchor="middle">N (예시)</text>
+            </g>
+          </g>
+
+          <!-- enamel coil -->
+          <g id="p-coil">
+            <ellipse id="coilGlow" cx="0" cy="0" rx="110" ry="90" fill="url(#gGlowO)" opacity="0"/>
+            <g id="cTurns"></g>
+            <g id="cBack"></g>
+            <g id="cLegs">
+              <line id="legL" x1="-44" y1="0" x2="-252" y2="0" stroke="#8a4a22" stroke-width="5.5" stroke-linecap="round"/>
+              <line id="legRb" x1="44" y1="1.4" x2="252" y2="1.4" stroke="#8a4a22" stroke-width="2.8" stroke-linecap="round"/>
+              <line id="legRt" x1="44" y1="-1.4" x2="252" y2="-1.4" stroke="#8a4a22" stroke-width="2.8" stroke-linecap="round"/>
+            </g>
+            <g id="cFront"></g>
+            <g id="cTies" opacity="0">
+              <rect x="-50" y="-8" width="12" height="16" rx="3" fill="#7a3f1c"/>
+              <rect x="38" y="-8" width="12" height="16" rx="3" fill="#7a3f1c"/>
+              <path d="M-48 -8 v16 M-44 -8 v16 M-40 -8 v16 M40 -8 v16 M44 -8 v16 M48 -8 v16" stroke="#c77a45" stroke-width="1.6"/>
+            </g>
+            <circle id="cMark" cx="0" cy="-44" r="6" fill="#f2c35a" stroke="#7a4a10" stroke-width="2" opacity="0"/>
+          </g>
+
+          <!-- metal stands -->
+          <g id="p-brL">
+            <rect x="-14" y="182" width="28" height="10" rx="3" fill="#8f8270"/>
+            <rect x="-4.5" y="10" width="9" height="176" rx="3" fill="url(#gMetal)" stroke="#6e6252" stroke-width="1"/>
+            <circle cx="0" cy="0" r="11" fill="none" stroke="#8f8270" stroke-width="6"/>
+          </g>
+          <g id="p-brR">
+            <rect x="-14" y="182" width="28" height="10" rx="3" fill="#8f8270"/>
+            <rect x="-4.5" y="10" width="9" height="176" rx="3" fill="url(#gMetal)" stroke="#6e6252" stroke-width="1"/>
+            <circle cx="0" cy="0" r="11" fill="none" stroke="#8f8270" stroke-width="6"/>
+          </g>
+
+          <!-- wire spool (scene 1 only) -->
+          <g id="p-wire">
+            <ellipse cx="0" cy="0" rx="50" ry="44" fill="none" stroke="#7a3f1c" stroke-width="6"/>
+            <ellipse cx="3" cy="-2" rx="45" ry="40" fill="none" stroke="#a3592b" stroke-width="5"/>
+            <ellipse cx="-2" cy="2" rx="40" ry="35" fill="none" stroke="#c46d38" stroke-width="5"/>
+            <ellipse cx="1" cy="0" rx="35" ry="30" fill="none" stroke="#a3592b" stroke-width="4"/>
+            <path d="M48 10 C70 20 76 44 98 46" stroke="#a3592b" stroke-width="5" fill="none" stroke-linecap="round"/>
+          </g>
+
+          <!-- sandpaper -->
+          <g id="p-paper">
+            <rect x="-62" y="-46" width="124" height="92" rx="8" fill="#c9a46b" stroke="#8a6a3a" stroke-width="2"/>
+            <g id="grit"></g>
+          </g>
+
+          <g id="insets" opacity="0"></g>
+          <g id="flow"></g>
+          <g id="rings"></g>
+          <g id="benchLbl"></g>
+          <path id="finger" d="M0 0 C-6 -10 2 -20 14 -18 L120 -2 C134 0 134 26 120 28 L14 22 C2 22 -6 12 0 0 Z" fill="#e9c4a0" stroke="#a5765a" stroke-width="2" opacity="0"/>
+          <text id="done" x="600" y="160" class="f-disp" font-size="54" fill="#cf5a33" text-anchor="middle" opacity="0">조립 완료</text>
+        </g>
+
+        <!-- scene 1 info card -->
+        <g id="card" opacity="0">
+          <rect x="640" y="190" width="510" height="370" rx="28" fill="#fffaf0" stroke="#d8caaf" stroke-width="2"/>
+          <g id="cDots"></g>
+          <text id="cIdx" x="672" y="272" class="f-mono" font-size="16" font-weight="500" fill="#7a6a58" letter-spacing="1"></text>
+          <text id="cName" x="672" y="330" class="f-disp" font-size="42" fill="#2b2118"></text>
+          <text id="cSpec" x="672" y="370" font-size="20" font-weight="500" fill="#a9772e"></text>
+          <line x1="672" y1="396" x2="1118" y2="396" stroke="#d8caaf" stroke-width="2"/>
+          <text x="672" y="434" font-size="18" font-weight="700" fill="#cf5a33">무엇에 쓰나</text>
+          <text id="cU0" x="672" y="476" font-size="24" fill="#2b2118"></text>
+          <text id="cU1" x="672" y="514" font-size="24" fill="#2b2118"></text>
+        </g>
+
+        <g id="panels"></g>
+
+        <!-- scene 5 HUD -->
+        <g id="hud" opacity="0">
+          <rect x="36" y="96" width="250" height="54" rx="27" fill="#fffaf0" fill-opacity=".95" stroke="#d8caaf" stroke-width="2"/>
+          <circle id="hBatDot" cx="66" cy="123" r="9" fill="#d97757"/>
+          <text id="hBat" x="86" y="131" font-size="21" font-weight="700" fill="#2b2118">건전지: 끼움</text>
+          <rect id="hsBox" x="864" y="96" width="300" height="54" rx="27" fill="#fffaf0" fill-opacity=".95" stroke="#a9772e" stroke-width="2"/>
+          <circle id="hsDot" cx="894" cy="123" r="9" fill="#a9772e"/>
+          <text id="hsTxt" x="914" y="131" font-size="21" font-weight="700" fill="#a9772e">코일: 멈춤</text>
+        </g>
+
+        <g id="sub"></g>
+
+        <!-- scene title card -->
+        <g id="tcard" opacity="0">
+          <rect width="1200" height="720" fill="#efe6d3" fill-opacity=".92"/>
+          <g id="tcIn">
+            <rect x="514" y="290" width="172" height="42" rx="21" fill="#fffaf0" stroke="#d0bfa0" stroke-width="1.5"/>
+            <text id="tcK" x="600" y="317" class="f-mono" font-size="17" font-weight="700" fill="#cf5a33" text-anchor="middle" letter-spacing="3">PART 1</text>
+            <text id="tcN" x="600" y="410" class="f-disp" font-size="64" fill="#2b2118" text-anchor="middle"></text>
+            <rect id="tcL" x="600" y="436" width="0" height="5" rx="2.5" fill="#d97757"/>
+          </g>
+        </g>
+      </svg>
+    </div>
+
+    <div class="bar">
+      <button class="btn primary" id="play" type="button" aria-label="재생">
+        <svg viewBox="0 0 14 14" aria-hidden="true"><path id="playIcon" d="M3 1.5 L12 7 L3 12.5 Z"/></svg>
+        <span id="playTxt">재생</span>
+      </button>
+      <input class="scrub" id="scrub" type="range" min="0" max="100" step="0.1" value="0" aria-label="재생 위치">
+      <span class="clock" id="clock">0:00 / 1:44</span>
+      <button class="btn icon" id="howto" type="button" aria-label="만드는 방법 다시 보기" title="만드는 방법 다시 보기">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3v4h4M3.4 7A5 5 0 1 1 4.6 11.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="t" id="howtoTxt">만드는 방법</span>
+      </button>
+      <button class="btn icon" id="rot" type="button" aria-label="화면 돌리기" title="화면 돌리기" hidden>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.2 8a5.2 5.2 0 1 1-1.9-4M13 2v3.2H9.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="btn icon" id="fs" type="button" aria-label="전체화면" title="전체화면">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path id="fsIcon" d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="t" id="fsTxt">전체화면</span>
+      </button>
+    </div>
+   </div>
+  </section>
+</div>
+
+<script>
+(function(){
+"use strict";
+/* skip DOM writes whose value did not change */
+(function(){
+  const sa = Element.prototype.setAttribute, ra = Element.prototype.removeAttribute;
+  Element.prototype.setAttribute = function(k, v){ const sv = String(v), c = this.__a || (this.__a = {}); if(c[k] === sv) return; c[k] = sv; sa.call(this, k, sv); };
+  Element.prototype.removeAttribute = function(k){ if(this.__a) delete this.__a[k]; ra.call(this, k); };
+})();
+const NS = "http://www.w3.org/2000/svg";
+const $ = id => document.getElementById(id);
+function mk(tag, attrs, parent){ const e = document.createElementNS(NS, tag); if(attrs) for(const k in attrs) e.setAttribute(k, attrs[k]); if(parent) parent.appendChild(e); return e; }
+function txt(parent, x, y, s, attrs){ const e = mk("text", Object.assign({x, y}, attrs || {}), parent); e.textContent = s; return e; }
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, p) => a + (b - a) * p;
+const eio = p => p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+const eout = p => 1 - Math.pow(1 - p, 3);
+const eback = p => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2); };
+function fade(t, a, b, c, d){ if(t < a || t > d) return 0; if(t < b) return seg(t, a, b); if(t <= c) return 1; return 1 - seg(t, c, d); }
+function rnd(n){ const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
+function hex(c){ return [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16)); }
+function mix(a, b, p){ const A = hex(a), B = hex(b); return "#" + A.map((v, i) => Math.round(lerp(v, B[i], p)).toString(16).padStart(2, "0")).join(""); }
+function op(e, v){ v = Math.round(v * 1000) / 1000; if(e.__o !== v){ e.__o = v; e.style.opacity = v; } }
+function estW(s, fs){ let w = 0; for(const ch of s) w += (ch.charCodeAt(0) > 255 ? 1 : .58) * fs; return w; }
+const D2R = Math.PI / 180;
+/* angle phi measured clockwise from "up" (screen) */
+const pol = (cx, cy, r, phi) => [cx + r * Math.sin(phi * D2R), cy - r * Math.cos(phi * D2R)];
+
+const C = { clay: "#d97757", clayHi: "#cf5a33", sand: "#a9772e", gold: "#b9780a", ink: "#2b2118", muted: "#7a6a58", danger: "#d4412a", enamel: "#8a4a22", bare: "#f3a56c", coilF: "#b8652f", coilB: "#6b3618" };
+
+/* ---------- script ---------- */
+const SCENES = [
+  { card: "준비물", dur: 11.6, beats: [
+    { t: 0,   title: "간이 전동기 준비물 5가지" },
+    { t: 1.0, title: "AA 건전지 · 홀더: 코일에 전류를 보내는 전원" },
+    { t: 3.1, title: "에나멜선 80cm: 감아서 코일을 만든다" },
+    { t: 5.2, title: "원형 자석: 늘 같은 자기장을 만든다" },
+    { t: 7.3, title: "금속 받침대 2개: 전류 통로 + 회전축 받침" },
+    { t: 9.4, title: "사포: 다리의 피복(절연막)을 벗긴다" }
+  ]},
+  { card: "조립하기", dur: 15.5, beats: [
+    { t: 0,    title: "이제 차례대로 만들어 보자" },
+    { t: 1.0,  title: "① 건전지에 에나멜선을 감아요 (처음 5cm는 남기고)" },
+    { t: 2.9,  title: "빙빙 촘촘하게 감고, 끝도 5cm 남겨요" },
+    { t: 3.6,  title: "건전지에서 동그란 코일을 쏙 빼요" },
+    { t: 4.9,  title: "② 남긴 끝으로 코일을 묶어요" },
+    { t: 6.0,  title: "끝을 링 안쪽으로 2~3번 감으면 풀리지 않아요" },
+    { t: 6.5,  title: "두 다리를 한 줄로 쭉 펴요 (코일이 도는 막대예요)" },
+    { t: 7.2,  title: "③ 사포로 다리의 겉껍질(피복)을 벗겨요" },
+    { t: 7.9,  title: "(−)쪽 다리: 빙 둘러 전부 문질러 구리색이 나오게" },
+    { t: 8.9,  title: "(+)쪽 다리: 위쪽 절반만 문질러요" },
+    { t: 9.4,  title: "아래쪽 절반은 벗기지 말고 그대로! (중요)" },
+    { t: 10.3, title: "④ 홀더 양쪽 끝에 받침대를 꽂아요" },
+    { t: 11.3, title: "받침대가 홀더의 쇠 부분에 꼭 닿아야 해요" },
+    { t: 11.8, title: "⑤ 건전지 위에 자석을 붙여요" },
+    { t: 12.6, title: "건전지 겉이 쇠라서 자석이 착 붙어요" },
+    { t: 12.9, title: "⑥ 받침대 구멍에 코일 다리를 걸쳐요" },
+    { t: 13.9, title: "코일이 자석에 닿지 않게 살짝 떠 있어야 해요" },
+    { t: 14.4, title: "완성!" }
+  ]},
+  { card: "원리 ① 전류", dur: 14, beats: [
+    { t: 0,    title: "코일이 받침대에 닿으면 회로가 이어진다" },
+    { t: 2.2,  title: "전류 길: (+)극 → 받침대 → 코일 → 받침대 → (−)극" },
+    { t: 5.0,  title: "점은 (+)→(−)로 정한 '전류 방향'으로 움직인다" },
+    { t: 6.6,  title: "반만 벗긴 다리를 확대해 보자" },
+    { t: 8.0,  title: "벗긴 면(구리)이 받침대에 닿을 때만 전류 ON" },
+    { t: 9.8,  title: "피복 면이 닿으면 전류 OFF: 회로가 끊긴다" },
+    { t: 11.6, title: "반 바퀴는 힘을 받고, 나머지 반 바퀴는 관성으로 돈다" }
+  ]},
+  { card: "원리 ② 자기장", dur: 15.2, beats: [
+    { t: 0,    title: "자석은 늘 같은 자기장을 만든다" },
+    { t: 2.8,  title: "자기장선은 눈에 보이지 않는다: 방향을 그림으로 그린 것" },
+    { t: 4.6,  title: "다리(회전축) 방향에서 옆으로 보면" },
+    { t: 6.0,  title: "전류가 흐르면 코일이 작은 전자석이 된다" },
+    { t: 8.0,  title: "같은 극은 밀고, 다른 극은 당긴다 → 코일이 돈다" },
+    { t: 9.6,  title: "자석과 나란해질 즈음 전류 OFF → 관성으로 넘어간다" },
+    { t: 12.0, title: "다시 전류 ON → 또 같은 방향으로 밀린다" }
+  ]},
+  { card: "실험해 보기", dur: 17, beats: [
+    { t: 0,    title: "받침대에 코일을 올려 둔다" },
+    { t: 2.0,  title: "손가락으로 살짝 튕겨서 회로가 이어지게 한다" },
+    { t: 3.0,  title: "반 바퀴마다 힘을 받아 한 방향으로 계속 돈다" },
+    { t: 7.4,  title: "건전지를 빼면 (붙은 자석도 함께) 전류가 끊긴다" },
+    { t: 8.4,  title: "관성으로 몇 바퀴 더 돌다가 서서히 멈춘다" },
+    { t: 11.8, title: "안 돌아갈 때 체크리스트" }
+  ]}
+];
+let acc = 0; SCENES.forEach(s => { s.start = acc; acc += s.dur; });
+const TOTAL = acc;
+const ST = SCENES.map(s => s.start);
+function sceneAt(T){ for(let i = SCENES.length - 1; i >= 0; i--) if(T >= ST[i]) return i; return 0; }
+
+/* ---------- parts ---------- */
+const P = {};
+["hold", "bat", "mag", "coil", "brL", "brR", "wire", "paper"].forEach(k => P[k] = $("p-" + k));
+const LAY = { hold: [600, 485, 1], bat: [600, 478, 1], mag: [600, 424, 1], coil: [600, 346, 1], brL: [405, 346, 1], brR: [795, 346, 1] };
+const TRAY = { wire: [170, 640, .55], paper: [370, 640, .55], hold: [600, 646, .36], bat: [600, 640, .34], mag: [840, 640, .7], brL: [1010, 600, .4], brR: [1070, 600, .4] };
+const SHOW = { hold: [330, 430, 1], bat: [330, 410, .9], wire: [330, 380, 1.7], mag: [330, 390, 1.9], brL: [270, 300, 1], brR: [390, 300, 1], paper: [330, 380, 1.6] };
+const CARDS = [
+  { parts: ["hold", "bat"], cat: "전원", name: "AA 건전지 · 홀더", spec: "1.5 V · 홀더 양 끝이 (−)극, (+)극", use: ["코일에 전류를 보내는 전원", "받침대를 끼울 자리가 된다"] },
+  { parts: ["wire"], cat: "코일", name: "에나멜선 80cm", spec: "구리선 겉에 얇은 절연 피복", use: ["감아서 코일(작은 전자석)을 만든다", "피복을 벗긴 곳만 전기가 통한다"] },
+  { parts: ["mag"], cat: "자기장", name: "원형 자석", spec: "페라이트 또는 네오디뮴", use: ["늘 같은 자기장을 만든다 (고정)", "코일을 밀고 당기는 상대"] },
+  { parts: ["brL", "brR"], cat: "받침대", name: "구멍 뚫린 금속 받침대 2개", spec: "전기가 통하는 금속", use: ["전류가 지나가는 길", "코일 다리를 받치는 회전축 받침"] },
+  { parts: ["paper"], cat: "도구", name: "사포", spec: "고운 사포", use: ["다리의 피복을 벗긴다", "한쪽은 전부, 한쪽은 위쪽 절반만"] }
+];
+const cardOf = {}; CARDS.forEach((c, i) => c.parts.forEach(k => cardOf[k] = i));
+const cDotEls = CARDS.map((_, i) => mk("circle", { cx: 680 + i * 22, cy: 228, r: 5, fill: "#d8caaf" }, $("cDots")));
+{ const g = $("grit"); for(let i = 0; i < 46; i++) mk("circle", { cx: (-56 + rnd(i) * 112).toFixed(1), cy: (-40 + rnd(i + 50) * 80).toFixed(1), r: (1 + rnd(i + 99) * 1.6).toFixed(1), fill: rnd(i + 7) > .5 ? "#a8844e" : "#e2c58e" }, g); }
+
+/* keyframe helper: keys = [[t, x, y, s, r, o, lift]] */
+function kf(t, keys){
+  if(t <= keys[0][0]) return keys[0].slice(1, 6);
+  for(let i = 1; i < keys.length; i++){
+    const a = keys[i - 1], b = keys[i];
+    if(t <= b[0]){
+      const p = seg(t, a[0], b[0]), e = eio(p), lift = b[6] || 0;
+      return [lerp(a[1], b[1], e), lerp(a[2], b[2], e) - lift * Math.sin(Math.PI * p), lerp(a[3], b[3], e), lerp(a[4], b[4], e), lerp(a[5], b[5], e)];
+    }
+  }
+  return keys[keys.length - 1].slice(1, 6);
+}
+const L = k => LAY[k], TR = k => TRAY[k];
+const K = (t, a, o = 1, r = 0, lift = 0) => [t, a[0], a[1], a[2], r, o, lift];
+/* scene 2 keyframes (scene-local time) */
+const WORK = [600, 250, 1];
+const KS2 = {
+  hold: [K(1.0, TR("hold")), K(1.8, L("hold"), 1, 0, 90)],
+  bat: [K(1.2, TR("bat")), K(2.0, WORK, 1, 0, 80), K(3.7, WORK), K(4.2, [330, 250, 1]), K(4.9, L("bat"), 1, 0, 60)],
+  wire: [K(1.4, TR("wire")), K(2.0, [880, 200, .9], 1, 0, 60), K(3.6, [880, 200, .25], 0)],
+  paper: [K(7.0, TR("paper")), K(7.5, [430, 262, .55], 1, -12, 80), K(8.6, [430, 262, .55], 1, -12), K(8.9, [770, 262, .55], 1, -12, 30), K(9.9, [770, 262, .55], 1, -12), K(10.3, TR("paper"), 1, 0, 60)],
+  brL: [K(10.4, TR("brL")), K(11.1, L("brL"), 1, 0, 90)],
+  brR: [K(10.6, TR("brR")), K(11.3, L("brR"), 1, 0, 90)],
+  mag: [K(11.9, TR("mag")), K(12.6, L("mag"), 1, 0, 120)]
+};
+function partState(k, T){
+  const t1 = T - ST[0], t2 = T - ST[1], t5 = T - ST[4];
+  if(k === "coil") return null;
+  if(T < ST[1]){
+    const i = cardOf[k], a = 1.0 + i * 2.1, s = SHOW[k], tr = TRAY[k];
+    if(t1 < a) return [1340, s[1], s[2], 10, 0];
+    const pin = eout(seg(t1, a, a + .4)), pout = eio(seg(t1, a + 1.65, a + 2.1));
+    if(pout <= 0) return [lerp(1340, s[0], pin), s[1], s[2], lerp(10, 0, pin), pin];
+    return [lerp(s[0], tr[0], pout), lerp(s[1], tr[1], pout) - 70 * Math.sin(Math.PI * pout), lerp(s[2], tr[2], pout), 0, 1];
+  }
+  if(T < ST[2]){
+    const r = kf(t2, KS2[k]);
+    if(k === "paper") r[0] += (t2 > 7.6 && t2 < 8.6) || (t2 > 8.9 && t2 < 9.9) ? 26 * Math.sin(t2 * 55) : 0;
+    if(k === "paper" || k === "wire") r[4] *= 1 - seg(t2, 14.4, 15);
+    return r;
+  }
+  if(k === "wire" || k === "paper") return [0, 0, 1, 0, 0];
+  if((k === "bat" || k === "mag") && T >= ST[4]){
+    const p = eio(seg(t5, 7.4, 8.1)), l = LAY[k];
+    return [l[0], l[1] + 300 * p, lerp(1, 1.08, p), 0, 1 - seg(t5, 8.1, 8.6)];
+  }
+  const l = LAY[k]; return [l[0], l[1], l[2], 0, 1];
+}
+function place(el, x, y, s, r, o){ el.setAttribute("transform", `translate(${x.toFixed(2)} ${y.toFixed(2)}) rotate(${r.toFixed(2)}) scale(${s.toFixed(4)})`); op(el, o); }
+
+/* ---------- coil drawing ---------- */
+const CR = 44;
+const cTurns = $("cTurns"), cBack = $("cBack"), cFront = $("cFront");
+const turnEls = Array.from({ length: 8 }, (_, j) => mk("ellipse", { cx: -21 + j * 6, cy: 0, rx: 6, ry: 43, fill: "none", stroke: j % 2 ? "#a3592b" : "#c46d38", "stroke-width": 4.5, opacity: 0 }, cTurns));
+const STR = [-3, 0, 3];
+const backP = STR.map(() => mk("path", { fill: "none", stroke: C.coilB, "stroke-width": 4, "stroke-linecap": "round" }, cBack));
+const frontP = STR.map((_, i) => mk("path", { fill: "none", stroke: i === 1 ? "#d9884f" : C.coilF, "stroke-width": 4.4, "stroke-linecap": "round" }, cFront));
+const legL = $("legL"), legRt = $("legRt"), legRb = $("legRb"), cTies = $("cTies"), cMark = $("cMark"), coilGlow = $("coilGlow"), cLegs = $("cLegs");
+function arcT(rx, ry){ return ry < .6 ? `M${(-rx).toFixed(1)} 0 L${rx.toFixed(1)} 0` : `M${(-rx).toFixed(1)} 0 A${rx.toFixed(1)} ${ry.toFixed(1)} 0 0 1 ${rx.toFixed(1)} 0`; }
+function arcB(rx, ry){ return ry < .6 ? `M${rx.toFixed(1)} 0 L${(-rx).toFixed(1)} 0` : `M${rx.toFixed(1)} 0 A${rx.toFixed(1)} ${ry.toFixed(1)} 0 0 1 ${(-rx).toFixed(1)} 0`; }
+/* st: {ring 0..1, rx, th, legs 0..1, ties, pL, pR, on} */
+function drawCoil(st){
+  const ry = CR * Math.abs(Math.cos(st.th)), topFront = Math.sin(st.th) >= 0;
+  STR.forEach((d, i) => {
+    const k = (CR + d) / CR, rx = st.rx * k, r2 = ry * k;
+    const top = arcT(rx, r2), bot = arcB(rx, r2);
+    frontP[i].setAttribute("d", topFront ? top : bot);
+    backP[i].setAttribute("d", topFront ? bot : top);
+    frontP[i].setAttribute("stroke", st.on > 0 ? mix(i === 1 ? "#d9884f" : C.coilF, "#f6b27f", st.on) : (i === 1 ? "#d9884f" : C.coilF));
+  });
+  op(cFront, st.ring); op(cBack, st.ring);
+  const ll = 44 + 208 * st.legs;
+  legL.setAttribute("x2", (-ll).toFixed(1)); legRt.setAttribute("x2", ll.toFixed(1)); legRb.setAttribute("x2", ll.toFixed(1));
+  op(cLegs, st.legs > .01 ? 1 : 0);
+  legL.setAttribute("stroke", mix(C.enamel, C.bare, st.pL));
+  legRt.setAttribute("stroke", mix(C.enamel, C.bare, st.pR));
+  op(cTies, st.ties);
+  const my = -CR * Math.cos(st.th);
+  cMark.setAttribute("cy", my.toFixed(1));
+  op(cMark, st.mark * (topFront ? 1 : .35));
+  op(coilGlow, st.on * .5);
+}
+
+/* ---------- current path (scene 3) ---------- */
+const flowG = $("flow");
+const PATH_D = "M795 520 L795 346 L644 346 A44 44 0 0 0 556 346 A44 44 0 0 0 644 346 A44 44 0 0 0 556 346 L405 346 L405 520";
+const pMain = mk("path", { d: PATH_D, fill: "none", stroke: "#cf5a33", "stroke-width": 3, "stroke-dasharray": "2 9", "stroke-linecap": "round", opacity: 0 }, flowG);
+const pBatIn = mk("path", { d: "M412 500 L788 500", fill: "none", stroke: "#cf5a33", "stroke-width": 2.5, "stroke-dasharray": "6 8", opacity: 0, "marker-end": "url(#mC)" }, flowG);
+function tab(path){ const Lg = path.getTotalLength(), n = Math.max(2, Math.ceil(Lg / 2)), a = []; for(let i = 0; i <= n; i++){ const q = path.getPointAtLength(Lg * i / n); a.push(q.x, q.y); } return { a, n, L: Lg }; }
+function at(t, d){ const f = clamp(d / t.L) * t.n, i = Math.min(t.n - 1, Math.floor(f)), u = f - i; return [lerp(t.a[2 * i], t.a[2 * i + 2], u), lerp(t.a[2 * i + 1], t.a[2 * i + 3], u)]; }
+const TM = tab(pMain);
+const GAP = 34;
+const dots = Array.from({ length: Math.ceil(TM.L / GAP) }, () => mk("circle", { r: 5.5, fill: "#fff4dc", stroke: "#cf5a33", "stroke-width": 2.2, opacity: 0 }, flowG));
+
+/* ---------- labels ---------- */
+const benchLbl = $("benchLbl");
+function pill(parent, cx, cy, label, color, fs){
+  fs = fs || 19;
+  const w = estW(label, fs) + 30, h = fs + 18;
+  const g = mk("g", { opacity: 0 }, parent);
+  mk("rect", { x: cx - w / 2, y: cy - h / 2, width: w, height: h, rx: h / 2, fill: "#fffaf0", "fill-opacity": .97, stroke: color, "stroke-opacity": .75, "stroke-width": 1.8 }, g);
+  txt(g, cx, cy + fs * .36, label, { "font-size": fs, "font-weight": 700, fill: color, "text-anchor": "middle" });
+  return g;
+}
+const lb1 = pill(benchLbl, 905, 440, "① (+)극에서 받침대로", C.clayHi, 18);
+const lb2 = pill(benchLbl, 600, 268, "② 코일을 빙글빙글", C.clayHi, 18);
+const lb3 = pill(benchLbl, 295, 440, "③ 받침대에서 (−)극으로", C.clayHi, 18);
+const lb4 = pill(benchLbl, 600, 560, "건전지 속을 지나 다시 (+)극으로", C.muted, 16);
+const nDir = pill(benchLbl, 600, 196, "실제 전자는 반대 방향(−→+)으로 · 점의 속도도 연출 (실제 전자는 아주 느림)", C.sand, 17);
+const nField = pill(benchLbl, 600, 150, "실제로는 안 보임 · 철가루를 뿌리면 모양을 볼 수 있다", C.sand, 17);
+const nSpeed = pill(benchLbl, 600, 236, "실제로는 훨씬 빠르게 돈다 (화면은 느리게)", C.sand, 17);
+const nDirR = pill(benchLbl, 600, 236, "도는 방향은 자석의 극과 건전지 방향에 따라 달라진다", C.sand, 17);
+const lbLine = mk("g", { opacity: 0 }, benchLbl);
+mk("line", { x1: 330, y1: 250, x2: 870, y2: 250, stroke: C.sand, "stroke-width": 2, "stroke-dasharray": "8 6" }, lbLine);
+txt(lbLine, 340, 232, "← 5cm →", { "font-size": 16, fill: C.sand, "font-weight": 700 });
+txt(lbLine, 860, 232, "← 5cm →", { "font-size": 16, fill: C.sand, "font-weight": 700, "text-anchor": "end" });
+txt(lbLine, 600, 330, "한 줄로 곧게", { "font-size": 18, fill: C.sand, "font-weight": 700, "text-anchor": "middle" });
+
+/* sanding insets (scene 2) */
+const insets = $("insets");
+function legInset(cx, cy, half, label){
+  const g = mk("g", {}, insets);
+  mk("line", { x1: cx, y1: cy + 52, x2: cx, y2: 244, stroke: C.muted, "stroke-width": 1.5, "stroke-dasharray": "4 4" }, g);
+  mk("circle", { cx, cy, r: 50, fill: "#fffaf0", stroke: "#d8caaf", "stroke-width": 2 }, g);
+  mk("circle", { cx, cy, r: 24, fill: C.bare }, g);
+  let ring;
+  if(half){
+    mk("path", { d: `M${cx + 28} ${cy} A28 28 0 0 1 ${cx - 28} ${cy}`, fill: "none", stroke: C.enamel, "stroke-width": 8 }, g);
+    ring = mk("path", { d: `M${cx - 28} ${cy} A28 28 0 0 1 ${cx + 28} ${cy}`, fill: "none", stroke: C.enamel, "stroke-width": 8 }, g);
+  } else ring = mk("circle", { cx, cy, r: 28, fill: "none", stroke: C.enamel, "stroke-width": 8 }, g);
+  txt(g, cx + 62, cy - 4, label[0], { "font-size": 18, "font-weight": 700, fill: C.ink });
+  txt(g, cx + 62, cy + 20, label[1], { "font-size": 15, fill: C.muted });
+  return ring;
+}
+const insL = legInset(250, 140, false, ["(−)쪽 다리", "피복을 전부 벗김"]);
+const insR = legInset(800, 140, true, ["(+)쪽 다리", "위쪽 절반만 벗김"]);
+
+/* snap rings */
+const ringsG = $("rings");
+const SNAPS = [{ t: 1.8, x: 600, y: 485 }, { t: 4.9, x: 600, y: 478 }, { t: 11.1, x: 405, y: 346 }, { t: 11.3, x: 795, y: 346 }, { t: 12.6, x: 600, y: 424 }, { t: 13.9, x: 405, y: 346 }, { t: 13.9, x: 795, y: 346 }];
+SNAPS.forEach(s => s.el = mk("circle", { cx: s.x, cy: s.y, r: 10, fill: "none", stroke: C.clayHi, "stroke-width": 4, opacity: 0 }, ringsG));
+
+/* front-view magnetic field of the magnet (scene 4) */
+const fieldF = $("fieldF");
+const FF = [];
+[[-1, 18], [-1, 34], [-1, 48], [1, 18], [1, 34], [1, 48]].forEach(([s, a]) => {
+  const x0 = 600 + s * a, x1 = 600 + s * (a * 3.4 + 40), y1 = 300 - a * 2.6;
+  const d = `M${x0} 410 C${x0 + s * 10} ${y1 - 40}, ${x1 + s * 60} ${y1 - 10}, ${x1 + s * 40} ${y1 + 90} S${600 + s * 66} 470, ${600 + s * 54} 452`;
+  FF.push(mk("path", { d, fill: "none", stroke: C.sand, "stroke-width": 2.6, "stroke-linecap": "round", opacity: 0, "marker-mid": "url(#mS)" }, fieldF));
+});
+FF.push(mk("path", { d: "M600 410 L600 300 L600 170", fill: "none", stroke: C.sand, "stroke-width": 2.6, opacity: 0, "marker-mid": "url(#mS)" }, fieldF));
+FF.forEach(p => p._L = p.getTotalLength());
+const magPole = $("magPole");
+
+/* ---------- panels ---------- */
+const panelsG = $("panels");
+function panelBase(){
+  const g = mk("g", { opacity: 0 }, panelsG);
+  mk("rect", { x: 0, y: 0, width: 1200, height: 720, fill: "#efe6d3", "fill-opacity": .9 }, g);
+  mk("rect", { x: 40, y: 90, width: 1120, height: 590, rx: 30, fill: "#fffaf0", stroke: "#d8caaf", "stroke-width": 2 }, g);
+  return g;
+}
+const ICON = {
+  led: '<path d="M-12 8 V-6 A12 12 0 0 1 12 -6 V8 Z" fill="#f2c35a"/><rect x="-15" y="8" width="30" height="6" rx="2" fill="#cdbfa6"/><path d="M-6 14 v18 M6 14 v14" stroke="#cdbfa6" stroke-width="3"/>',
+  phone: '<rect x="-15" y="-26" width="30" height="52" rx="6" fill="#efe5d2"/><rect x="-11" y="-20" width="22" height="36" rx="2" fill="#4a7ea6"/><path d="M0 26 v14" stroke="#efe5d2" stroke-width="4"/>',
+  motor: '<ellipse rx="20" ry="24" fill="none" stroke="#f09b74" stroke-width="5"/><path d="M-34 0 H-20 M20 0 H34" stroke="#f09b74" stroke-width="4"/>',
+  kettle: '<path d="M-20 26 L-16 -14 H16 L20 26 Z" fill="#efe5d2"/><path d="M16 -6 C30 -6 30 16 18 18" stroke="#efe5d2" stroke-width="4" fill="none"/><rect x="-8" y="-22" width="16" height="8" rx="3" fill="#efe5d2"/><path d="M-6 -30 q4 -6 0 -12 M6 -30 q4 -6 0 -12" stroke="#f09b74" stroke-width="2.5" fill="none"/>',
+  heart: '<path d="M0 22 C-30 2 -26 -24 -8 -20 C-3 -19 0 -14 0 -12 C0 -14 3 -19 8 -20 C26 -24 30 2 0 22 Z" fill="#e5735a"/>',
+  globe: '<circle r="26" fill="#4a7ea6"/><ellipse cx="-8" cy="-8" rx="12" ry="8" fill="#9aae6a"/><ellipse cx="10" cy="10" rx="9" ry="6" fill="#9aae6a"/><path d="M-30 -20 l10 4 -10 4" stroke="#f2c35a" stroke-width="3" fill="none"/>',
+  fridge: '<rect x="-20" y="-28" width="40" height="56" rx="6" fill="#efe5d2"/><path d="M-20 -6 H20" stroke="#b8ab95" stroke-width="2"/><rect x="-10" y="-22" width="14" height="10" rx="2" fill="#d97757"/><rect x="2" y="4" width="12" height="12" rx="6" fill="#f2c35a"/>',
+  magnet: '<rect x="-28" y="-10" width="56" height="20" rx="4" fill="#8a857c"/><rect x="-28" y="-10" width="56" height="10" rx="4" fill="#d97757"/>',
+  mri: '<circle r="26" fill="#efe5d2"/><circle r="12" fill="#2a241e"/><rect x="-34" y="20" width="68" height="8" rx="3" fill="#efe5d2"/>'
+};
+/* log ladder: bars run from the left edge; a lighter tail shows a range */
+function ladder(o){
+  const g = panelBase();
+  txt(g, 90, 150, o.title, { class: "f-disp", "font-size": 38, fill: C.ink });
+  txt(g, 90, 182, o.sub, { "font-size": 18, fill: C.muted });
+  const lmin = Math.log10(o.min), lmax = Math.log10(o.max);
+  const X = v => o.x0 + (Math.log10(v) - lmin) / (lmax - lmin) * (o.x1 - o.x0);
+  o.ticks.forEach((tk, k) => {
+    const x = o.x0 + k * (o.x1 - o.x0) / (o.ticks.length - 1);
+    mk("line", { x1: x, y1: o.y0 - 30, x2: x, y2: o.axisY, stroke: "#e6dac2", "stroke-width": 1 }, g);
+    txt(g, x, o.axisY + 24, tk, { "font-size": o.tickFs || 15, fill: C.muted, "text-anchor": "middle", class: "f-mono" });
+  });
+  mk("line", { x1: o.x0, y1: o.axisY, x2: o.x1, y2: o.axisY, stroke: C.muted, "stroke-width": 2 }, g);
+  txt(g, o.x1, o.axisY + 50, o.unit, { "font-size": 16, fill: C.muted, "text-anchor": "end" });
+  const rows = o.rows.map((r, i) => {
+    const y = o.y0 + i * o.dy, rg = mk("g", { opacity: 0 }, g);
+    if(r.hl) mk("rect", { x: 58, y: y - 29, width: 1084, height: 58, rx: 14, fill: r.hl, "fill-opacity": .13 }, rg);
+    mk("circle", { cx: 96, cy: y, r: 23, fill: "#2a241e" }, rg);
+    const ic = mk("g", { transform: `translate(96 ${y}) scale(.6)` }, rg); ic.innerHTML = ICON[r.icon];
+    txt(rg, 132, y - 3, r.name, { "font-size": 22, fill: C.ink, "font-weight": 700 });
+    txt(rg, 132, y + 21, r.txt, { "font-size": 16, fill: C.muted });
+    const xs = X(r.lo || r.val), xe = X(r.hi || r.val);
+    const bar = mk("rect", { x: o.x0, y: y - 10, width: 0, height: 20, rx: 10, fill: r.color }, rg);
+    const tail = r.hi ? mk("rect", { x: xs - 10, y: y - 10, width: 0, height: 20, rx: 10, fill: r.color, "fill-opacity": .42 }, rg) : null;
+    let tag = null;
+    if(r.tag){ tag = txt(rg, xe + 14, y + 6, r.tag, { "font-size": 17, "font-weight": 700, fill: r.tagColor || C.muted }); op(tag, 0); }
+    return { rg, bar, tail, xs, xe, tag };
+  });
+  return { g, rows, x0: o.x0 };
+}
+function runLadder(Lp, t, a0, step){
+  Lp.rows.forEach((r, i) => {
+    const a = a0 + i * step, p = eout(seg(t, a, a + .8));
+    op(r.rg, seg(t, a, a + .3));
+    r.bar.setAttribute("width", Math.max(0, (r.xs - Lp.x0) * p).toFixed(1));
+    if(r.tail) r.tail.setAttribute("width", Math.max(0, (r.xe - r.xs + 10) * eout(seg(t, a + .6, a + 1.1))).toFixed(1));
+    if(r.tag) op(r.tag, seg(t, a + .7, a + 1));
+  });
+}
+
+const IP = ladder({
+  title: "이 전류는 얼마나 셀까?", sub: "로그 눈금: 오른쪽으로 한 칸 갈 때마다 10배 · 짙은 막대 끝~옅은 부분 = 범위",
+  min: 1e-3, max: 100, x0: 520, x1: 1110, y0: 250, dy: 82, axisY: 568, unit: "A (암페어)",
+  ticks: ["1mA", "10mA", "100mA", "1A", "10A", "100A"],
+  rows: [
+    { icon: "led", name: "LED 표시등", txt: "약 2~20 mA", lo: 2e-3, hi: 2e-2, color: "#7d705f", tag: "작은 불빛 하나" },
+    { icon: "phone", name: "스마트폰 충전", txt: "약 1~3 A (USB 케이블)", lo: 1, hi: 3, color: "#7d705f" },
+    { icon: "motor", name: "이 간이 전동기 (추정)", txt: "약 1~3 A · 선 굵기·접촉 따라 다름", lo: 1, hi: 3, color: C.clay, hl: C.clay, tag: "건전지 1개로!", tagColor: C.clayHi },
+    { icon: "kettle", name: "전기포트", txt: "약 8 A (1.8 kW · 220 V)", val: 8, color: "#7d705f" }
+  ]
+});
+const BP = ladder({
+  title: "이 자기장은 얼마나 셀까?", sub: "로그 눈금: 한 칸에 10배 · 단위 T(테슬라) · 옅은 부분 = 범위",
+  min: 1e-11, max: 10, x0: 520, x1: 1110, y0: 238, dy: 64, axisY: 610, unit: "T (테슬라)", tickFs: 13,
+  ticks: ["10p", "100p", "1n", "10n", "100n", "1μ", "10μ", "100μ", "1m", "10m", "100m", "1", "10"],
+  rows: [
+    { icon: "heart", name: "사람 심장 (몸 밖)", txt: "약 10~100 pT · 아주 예민한 장비로만", lo: 1e-11, hi: 1e-10, color: "#7d705f" },
+    { icon: "globe", name: "지구 자기장", txt: "약 25~65 μT · 철새·바다거북 길 찾기", lo: 2.5e-5, hi: 6.5e-5, color: "#7d705f" },
+    { icon: "motor", name: "이 코일 중심 (추정)", txt: "약 1~3 mT · 전류가 흐를 때만", lo: 1e-3, hi: 3e-3, color: C.clay, hl: C.clay, tag: "우리가 만든 전자석", tagColor: C.clayHi },
+    { icon: "fridge", name: "냉장고 자석 (표면)", txt: "약 5 mT", val: 5e-3, color: "#7d705f" },
+    { icon: "magnet", name: "원형 자석 표면", txt: "페라이트 ~0.1 T · 네오디뮴 ~0.5 T", lo: 5e-2, hi: 5e-1, color: C.sand, hl: C.sand },
+    { icon: "mri", name: "병원 MRI", txt: "1.5~3 T", lo: 1.5, hi: 3, color: "#7d705f" }
+  ]
+});
+const bBox = mk("g", {}, BP.g); op(bBox, 0);
+txt(bBox, 1110, 150, "코일 추정: B ≈ μ₀·N·I ÷ 2r", { "font-size": 17, fill: C.ink, "text-anchor": "end", "font-weight": 700 });
+txt(bBox, 1110, 176, "가정 N≈13회, r≈7mm, I≈1~3A", { "font-size": 16, fill: C.muted, "text-anchor": "end" });
+
+/* zoom panel: half-stripped leg (scene 3) */
+const ZP = panelBase();
+txt(ZP, 90, 150, "반만 벗긴 다리를 확대하면", { class: "f-disp", "font-size": 36, fill: C.ink });
+txt(ZP, 90, 180, "다리(회전축) 방향에서 본 모습 · 실제보다 아주 느리게", { "font-size": 17, fill: C.muted });
+const LC = [360, 408.5];
+mk("circle", { cx: 360, cy: 380, r: 92, fill: "none", stroke: "url(#gMetal)", "stroke-width": 22 }, ZP);
+mk("circle", { cx: 360, cy: 380, r: 92, fill: "none", stroke: "#6e6252", "stroke-width": 1.5 }, ZP);
+txt(ZP, 360, 268, "받침대 구멍 (금속)", { "font-size": 17, fill: C.muted, "text-anchor": "middle" });
+mk("circle", { cx: LC[0], cy: LC[1], r: 47, fill: C.bare }, ZP);
+const zEnam = mk("path", { fill: "none", stroke: C.enamel, "stroke-width": 9, "stroke-linecap": "butt" }, ZP);
+const zSpark = mk("g", {}, ZP);
+mk("circle", { cx: 360, cy: 461, r: 16, fill: "url(#gGlowO)" }, zSpark);
+mk("path", { d: "M360 445 v-10 M346 452 l-8 -6 M374 452 l8 -6", stroke: C.clayHi, "stroke-width": 3, "stroke-linecap": "round" }, zSpark);
+txt(ZP, 360, 506, "▲ 맞닿는 곳", { "font-size": 17, fill: C.ink, "text-anchor": "middle", "font-weight": 700 });
+mk("rect", { x: 120, y: 556, width: 22, height: 14, rx: 3, fill: C.bare }, ZP);
+txt(ZP, 152, 569, "벗긴 면 (구리) → 전기가 통함", { "font-size": 18, fill: C.ink });
+mk("rect", { x: 120, y: 590, width: 22, height: 14, rx: 3, fill: C.enamel }, ZP);
+txt(ZP, 152, 603, "피복 면 → 전기가 안 통함", { "font-size": 18, fill: C.ink });
+const DC = [850, 382], DR = 112;
+mk("path", { d: `M${DC[0] - DR} ${DC[1]} A${DR} ${DR} 0 0 1 ${DC[0] + DR} ${DC[1]} Z`, fill: C.clay, "fill-opacity": .16 }, ZP);
+mk("path", { d: `M${DC[0] + DR} ${DC[1]} A${DR} ${DR} 0 0 1 ${DC[0] - DR} ${DC[1]} Z`, fill: C.sand, "fill-opacity": .12 }, ZP);
+mk("circle", { cx: DC[0], cy: DC[1], r: DR, fill: "none", stroke: "#d8caaf", "stroke-width": 2 }, ZP);
+mk("line", { x1: DC[0] - DR - 10, y1: DC[1], x2: DC[0] + DR + 10, y2: DC[1], stroke: "#cdbfa6", "stroke-width": 1.5, "stroke-dasharray": "5 5" }, ZP);
+txt(ZP, DC[0], 232, "ON · 힘을 받는 반 바퀴", { "font-size": 19, "font-weight": 700, fill: C.clayHi, "text-anchor": "middle" });
+txt(ZP, DC[0], 528, "OFF · 관성으로 도는 반 바퀴", { "font-size": 19, "font-weight": 700, fill: C.sand, "text-anchor": "middle" });
+mk("path", { d: `M${(DC[0] - 132 * Math.sin(35 * D2R)).toFixed(1)} ${(DC[1] - 132 * Math.cos(35 * D2R)).toFixed(1)} A132 132 0 0 1 ${(DC[0] + 132 * Math.sin(35 * D2R)).toFixed(1)} ${(DC[1] - 132 * Math.cos(35 * D2R)).toFixed(1)}`, fill: "none", stroke: C.muted, "stroke-width": 2, "marker-end": "url(#mM)" }, ZP);
+const zRod = mk("g", {}, ZP);
+mk("rect", { x: -100, y: -8, width: 200, height: 16, rx: 8, fill: "#a3592b" }, zRod);
+mk("circle", { cx: 100, cy: 0, r: 13, fill: "#f2c35a", stroke: "#7a4a10", "stroke-width": 2.5 }, zRod);
+mk("circle", { cx: 0, cy: 0, r: 6, fill: "#fffaf0", stroke: "#6b3618", "stroke-width": 2 }, zRod);
+txt(ZP, DC[0] + 128, DC[1] + 6, "코일", { "font-size": 16, fill: C.muted });
+const zChip = mk("g", {}, ZP);
+const zChipR = mk("rect", { x: 760, y: 568, width: 180, height: 50, rx: 25, fill: "#fffaf0", stroke: C.clayHi, "stroke-width": 2.5 }, zChip);
+const zChipT = txt(zChip, 850, 601, "전류 ON", { "font-size": 23, "font-weight": 800, fill: C.clayHi, "text-anchor": "middle" });
+
+/* heat panel (scene 3) */
+const HP = panelBase();
+txt(HP, 90, 150, "저항이 거의 없는 회로", { class: "f-disp", "font-size": 38, fill: C.ink });
+txt(HP, 90, 182, "전구나 모터 같은 '일하는 부품' 없이 선 하나로 (+)와 (−)를 잇는 셈", { "font-size": 18, fill: C.muted });
+const hR = [
+  ["에나멜선 80cm", "약 0.1 Ω", "지름 0.4~0.5 mm 가정"],
+  ["건전지 속 저항", "약 0.2~0.3 Ω", "새 알칼라인 건전지 기준"],
+  ["받침대와 닿는 곳", "약 0.1~1 Ω", "닿는 상태에 따라 크게 달라짐"]
+].map((r, i) => { const g = mk("g", {}, HP); const y = 240 + i * 46; mk("circle", { cx: 104, cy: y - 7, r: 6, fill: C.sand }, g); txt(g, 122, y, r[0], { "font-size": 22, fill: C.ink, "font-weight": 500 }); txt(g, 380, y, r[1], { "font-size": 22, fill: C.ink, "font-weight": 700, class: "f-mono" }); txt(g, 560, y, r[2], { "font-size": 17, fill: C.muted }); op(g, 0); return g; });
+const hF = mk("g", {}, HP); op(hF, 0);
+mk("rect", { x: 80, y: 382, width: 1040, height: 70, rx: 18, fill: "#ffffff", stroke: C.clay, "stroke-width": 2 }, hF);
+txt(hF, 600, 427, "전류 I = 전압 V ÷ 저항 R ≈ 1.5 V ÷ 약 0.5~1.5 Ω ≈ 1~3 A", { "font-size": 26, "font-weight": 800, fill: C.clayHi, "text-anchor": "middle" });
+const hC = [["뜨거움", "선과 받침대가 뜨거워진다 → 오래 켜 두지 말고, 손 데지 않게"], ["닳음", "건전지가 빨리 닳는다 → 실험이 끝나면 바로 빼 두기"]].map((r, i) => {
+  const g = mk("g", {}, HP), y = 520 + i * 64; op(g, 0);
+  mk("rect", { x: 80, y: y - 30, width: 96, height: 44, rx: 22, fill: i ? C.sand : C.danger, "fill-opacity": .14 }, g);
+  txt(g, 128, y, r[0], { "font-size": 20, "font-weight": 800, fill: i ? C.sand : C.danger, "text-anchor": "middle" });
+  txt(g, 196, y, r[1], { "font-size": 23, fill: C.ink });
+  return g;
+});
+
+/* side-view panel (scene 4) */
+const SP = panelBase();
+txt(SP, 90, 150, "옆에서 보면: 작은 전자석과 자석", { class: "f-disp", "font-size": 36, fill: C.ink });
+txt(SP, 90, 180, "다리(회전축) 방향에서 본 모습 · 극 방향은 예시", { "font-size": 17, fill: C.muted });
+const C4 = [420, 400], R4 = 105;
+const sField = [-100, -50, 0, 50, 100].map(k => mk("path", { d: `M${420 + k} 540 C${420 + k * 1.05} 450 ${420 + k * 1.6} 320 ${420 + k * 2.3} 205`, fill: "none", stroke: C.sand, "stroke-width": 2.6, "stroke-linecap": "round", "marker-mid": "url(#mS)", opacity: 0 }, SP));
+sField.forEach(p => { p._L = p.getTotalLength(); const d = p.getAttribute("d"); p.setAttribute("d", d); });
+mk("rect", { x: 290, y: 540, width: 260, height: 30, rx: 6, fill: C.clay }, SP);
+mk("rect", { x: 290, y: 570, width: 260, height: 30, rx: 6, fill: "#7d756a" }, SP);
+txt(SP, 420, 562, "N", { "font-size": 22, "font-weight": 800, fill: "#2c1409", "text-anchor": "middle" });
+txt(SP, 420, 593, "S", { "font-size": 22, "font-weight": 800, fill: "#f3eee2", "text-anchor": "middle" });
+txt(SP, 420, 630, "원형 자석 (옆모습)", { "font-size": 17, fill: C.muted, "text-anchor": "middle" });
+mk("path", { d: `M${C4[0] - 70} ${C4[1] - 150} A165 165 0 0 1 ${C4[0] + 70} ${C4[1] - 150}`, fill: "none", stroke: C.muted, "stroke-width": 2, "marker-end": "url(#mM)" }, SP);
+const sRot = mk("g", {}, SP);
+const sCF = mk("g", { opacity: 0 }, sRot);
+[[105, 1], [-105, 0]].forEach(([cx, sw]) => [30, 54].forEach(r => mk("path", { d: `M${cx} ${-r} A${r} ${r} 0 0 ${sw} ${cx} ${r} A${r} ${r} 0 0 ${sw} ${cx} ${-r}`, fill: "none", stroke: C.clayHi, "stroke-width": 2.2, "stroke-dasharray": "7 5", "marker-mid": "url(#mC)" }, sCF)));
+mk("rect", { x: -105, y: -9, width: 210, height: 18, rx: 9, fill: "#a3592b" }, sRot);
+[105, -105].forEach((x, i) => { mk("circle", { cx: x, cy: 0, r: 14, fill: "#fffaf0", stroke: "#6b3618", "stroke-width": 3 }, sRot); if(i === 0) mk("path", { d: `M${x - 6} -6 L${x + 6} 6 M${x + 6} -6 L${x - 6} 6`, stroke: "#6b3618", "stroke-width": 3 }, sRot); else mk("circle", { cx: x, cy: 0, r: 4, fill: "#6b3618" }, sRot); });
+mk("circle", { cx: 0, cy: 0, r: 6, fill: "#fffaf0", stroke: "#6b3618", "stroke-width": 2 }, sRot);
+function poleLbl(letter, fill, tc){ const g = mk("g", { opacity: 0 }, SP); mk("circle", { r: 17, fill }, g); txt(g, 0, 7, letter, { "font-size": 20, "font-weight": 800, fill: tc, "text-anchor": "middle" }); const ar = mk("line", { x1: 0, y1: 0, x2: 0, y2: 0, stroke: C.ink, "stroke-width": 3.5, "marker-end": "url(#mK)" }, SP); const at2 = txt(SP, 0, 0, "", { "font-size": 16, "font-weight": 700, fill: C.ink }); return { g, ar, at: at2 }; }
+const sN = poleLbl("N", C.clay, "#2c1409"), sS = poleLbl("S", "#7d756a", "#f3eee2");
+const leg4 = mk("g", { opacity: 0 }, SP);
+mk("line", { x1: 700, y1: 250, x2: 750, y2: 250, stroke: C.sand, "stroke-width": 3, "marker-end": "url(#mS)" }, leg4);
+txt(leg4, 766, 257, "자석의 자기장 · 늘 그대로", { "font-size": 20, fill: C.ink });
+mk("line", { x1: 700, y1: 300, x2: 750, y2: 300, stroke: C.clayHi, "stroke-width": 3, "stroke-dasharray": "7 5", "marker-end": "url(#mC)" }, leg4);
+txt(leg4, 766, 307, "코일의 자기장 · 전류가 흐를 때만", { "font-size": 20, fill: C.ink });
+mk("line", { x1: 700, y1: 350, x2: 750, y2: 350, stroke: C.ink, "stroke-width": 3.5, "marker-end": "url(#mK)" }, leg4);
+txt(leg4, 766, 357, "극에 걸리는 힘 (밀어냄·끌어당김)", { "font-size": 20, fill: C.ink });
+txt(leg4, 700, 410, "⊗ ⊙ 코일 단면: 전류가 들어가는/나오는 쪽", { "font-size": 17, fill: C.muted });
+const sChip = mk("g", { opacity: 0 }, SP);
+const sChipR = mk("rect", { x: 700, y: 452, width: 330, height: 54, rx: 27, fill: "#fffaf0", stroke: C.clayHi, "stroke-width": 2.5 }, sChip);
+const sChipT = txt(sChip, 865, 487, "", { "font-size": 22, "font-weight": 800, fill: C.clayHi, "text-anchor": "middle" });
+const sNote = txt(SP, 700, 596, "자석을 뒤집거나 건전지를 반대로 넣으면 반대로 돈다", { "font-size": 17, fill: C.muted }); op(sNote, 0);
+
+/* checklist panel (scene 5) */
+const CP = panelBase();
+txt(CP, 90, 160, "안 돌아갈 때 체크리스트", { class: "f-disp", "font-size": 40, fill: C.ink });
+const CK = [["피복이 남아 있다", "→ 벗긴 부분을 사포로 한 번 더"], ["수평이 안 맞다", "→ 두 다리를 일직선으로, 코일 무게 균형 맞추기"], ["자석과 거리가 멀다", "→ 닿지 않을 만큼 가깝게 (몇 mm)"]].map((r, i) => {
+  const g = mk("g", {}, CP), y = 270 + i * 110; op(g, 0);
+  mk("rect", { x: 80, y: y - 46, width: 1040, height: 84, rx: 20, fill: i % 2 ? "#fbf3e2" : "#f7ecd6" }, g);
+  mk("circle", { cx: 130, cy: y - 4, r: 24, fill: C.clay }, g);
+  txt(g, 130, y + 5, String(i + 1), { "font-size": 24, "font-weight": 800, fill: "#2c1409", "text-anchor": "middle" });
+  txt(g, 176, y + 6, r[0], { "font-size": 30, "font-weight": 800, fill: C.ink });
+  txt(g, 176 + estW(r[0], 30) + 20, y + 5, r[1], { "font-size": 24, fill: C.ink });
+  return g;
+});
+const ckNote = txt(CP, 90, 630, "그래도 안 되면 손가락으로 다시 살짝 튕겨 보기 (멈춘 자리에선 전류가 끊겨 있을 수 있음)", { "font-size": 19, fill: C.muted }); op(ckNote, 0);
+
+/* ---------- refs ---------- */
+const bench = $("bench"), tray = $("tray"), card = $("card"), tcard = $("tcard"), tcIn = $("tcIn"), tcL = $("tcL"), done = $("done"), finger = $("finger");
+const hud = $("hud"), hBat = $("hBat"), hBatDot = $("hBatDot"), hsBox = $("hsBox"), hsDot = $("hsDot"), hsTxt = $("hsTxt");
+
+/* rotation angle of the coil in the zoom & side panels (deg, clockwise; ON when 180..360 mod 360) */
+function zAlpha(t){ return t < 8 ? 270 : 270 + 90 * (t - 8); }
+function sAlpha(t){ return t < 8 ? 270 : 270 + 70 * (t - 8); }
+const isOn = a => { const m = ((a % 360) + 360) % 360; return m > 180; };
+/* scene-5 coil angle (front view, rad) */
+const W5 = 2 * Math.PI * 1.25, TH0 = .35;
+function theta5(t){
+  if(t < 2.45) return TH0;
+  const r = 0.95;
+  if(t < 2.45 + r){ const d = t - 2.45; return TH0 + W5 * d * d / (2 * r); }
+  const th1 = TH0 + W5 * r / 2;
+  if(t < 7.6) return th1 + W5 * (t - 2.45 - r);
+  const th2 = th1 + W5 * (7.6 - 2.45 - r), D = 4.0, s = Math.min(D, t - 7.6);
+  return th2 + W5 * (s - s * s / (2 * D));
+}
+
+/* ---------- render ---------- */
+let lastCardIdx = -1, lastScene = -1, lastBeat = null, lastHs = "";
+const subG = $("sub");
+const subRect = mk("rect", { y: 20, height: 54, rx: 27, fill: "#fffaf0", "fill-opacity": .96, stroke: "#d8caaf", "stroke-width": 1.5 }, subG);
+const subTxt = txt(subG, 600, 56, "", { "font-size": 25, "font-weight": 700, fill: C.ink, "text-anchor": "middle" });
+function setSub(t){ subTxt.textContent = t; const w = estW(t, 25) + 56; subRect.setAttribute("x", (600 - w / 2).toFixed(1)); subRect.setAttribute("width", w.toFixed(1)); }
+
+function render(T){
+  const t1 = T - ST[0], t2 = T - ST[1], t3 = T - ST[2], t4 = T - ST[3], t5 = T - ST[4];
+  const si = sceneAt(T);
+  const in2 = si === 1, in3 = si === 2, in4 = si === 3, in5 = si === 4;
+
+  /* camera */
+  const z = in5 ? 1 + .16 * eio(seg(t5, .2, 1.6)) * (1 - eio(seg(t5, 7.2, 8.2))) : 1;
+  bench.setAttribute("transform", `translate(600 ${in5 ? 380 : 360}) scale(${z.toFixed(4)}) translate(-600 ${in5 ? -380 : -360})`);
+
+  /* parts */
+  ["hold", "bat", "mag", "brL", "brR", "wire", "paper"].forEach(k => { const s = partState(k, T); place(P[k], s[0], s[1], s[2], s[3], s[4]); });
+  op(tray, si === 0 ? seg(t1, 1.4, 1.8) : in2 ? 1 - seg(t2, 14.4, 15) : 0);
+
+  /* coil */
+  let cx = 600, cy = 346, cOp = 0;
+  const cs = { ring: 0, rx: CR, th: 0, legs: 1, ties: 1, pL: 1, pR: 1, on: 0, mark: 0 };
+  if(in2){
+    cOp = t2 >= 2.0 ? 1 : 0;
+    const nTurn = seg(t2, 2.0, 3.6) * 8, bundle = eio(seg(t2, 4.4, 4.9));
+    turnEls.forEach((e, j) => { op(e, t2 < 4.9 ? clamp(nTurn - j) : 0); e.setAttribute("cx", ((-21 + j * 6) * (1 - bundle)).toFixed(1)); });
+    const rp = eio(seg(t2, 4.9, 5.6));
+    cs.ring = t2 >= 4.9 ? 1 : 0; cs.rx = lerp(7, CR, rp);
+    cs.legs = eout(seg(t2, 5.4, 6.0)); cs.ties = seg(t2, 6.0, 6.5);
+    cs.pL = seg(t2, 7.6, 8.6); cs.pR = seg(t2, 8.9, 9.9);
+    cy = lerp(250, 346, eio(seg(t2, 13.0, 13.9)));
+  } else {
+    turnEls.forEach(e => op(e, 0));
+    if(si >= 2){ cOp = 1; cs.ring = 1; }
+    if(in5){
+      const th = theta5(t5);
+      cs.th = th; cs.mark = 1;
+      const powered = t5 >= 2.45 && t5 < 7.6;
+      cs.on = powered && Math.sin(th) < 0 ? .8 : 0;
+    }
+    if(in3) cs.on = t3 > 1 && t3 < 6.6 ? .55 + .2 * Math.sin(T * 8) : 0;
+  }
+  place(P.coil, cx, cy, 1, 0, cOp);
+  drawCoil(cs);
+
+  /* scene 1 card */
+  let cO = 0, cSc = 1;
+  if(si === 0 && t1 >= 1.0){
+    const i = Math.min(4, Math.floor((t1 - 1.0) / 2.1)), u = t1 - 1.0 - 2.1 * i;
+    cO = fade(u, .25, .55, 1.6, 1.95); cSc = lerp(.94, 1, eout(seg(u, .25, .55)));
+    if(i !== lastCardIdx){
+      lastCardIdx = i; const c = CARDS[i];
+      $("cIdx").textContent = `${i + 1} / 5 · ${c.cat}`; $("cName").textContent = c.name; $("cSpec").textContent = c.spec;
+      $("cU0").textContent = "· " + c.use[0]; $("cU1").textContent = "· " + c.use[1];
+      cDotEls.forEach((d, j) => d.setAttribute("fill", j === i ? C.clay : (j < i ? "#cfa77f" : "#d8caaf")));
+    }
+  }
+  card.setAttribute("transform", `translate(895 375) scale(${cSc.toFixed(3)}) translate(-895 -375)`);
+  op(card, cO);
+
+  /* scene 2 extras */
+  op(lbLine, in2 ? fade(t2, 6.4, 6.7, 7.0, 7.3) : 0);
+  op(insets, in2 ? fade(t2, 7.3, 7.6, 9.9, 10.3) : 0);
+  op(insL, 1 - (in2 ? seg(t2, 7.6, 8.6) : 1)); op(insR, 1 - (in2 ? seg(t2, 8.9, 9.9) : 1));
+  SNAPS.forEach(s => { const p = in2 ? seg(t2, s.t, s.t + .6) : 0; if(p > 0 && p < 1){ s.el.setAttribute("r", (10 + 46 * p).toFixed(1)); op(s.el, 1 - p); } else op(s.el, 0); });
+  op(done, in2 ? fade(t2, 14.4, 14.8, 15.1, 15.5) : 0);
+
+  /* scene 3: current path on the bench */
+  const flowOn = in3 && t3 > 1.0 && t3 < 6.8;
+  op(pMain, flowOn ? fade(t3, 1.0, 1.6, 6.2, 6.7) * .7 : 0);
+  op(pBatIn, flowOn ? fade(t3, 3.4, 3.8, 6.2, 6.7) * .8 : 0);
+  dots.forEach((c, k) => {
+    if(!flowOn || t3 < 2.2){ op(c, 0); return; }
+    const d = (t3 - 2.2) * 150 - k * GAP;
+    if(d < 0){ op(c, 0); return; }
+    const p = at(TM, d % TM.L); c.setAttribute("cx", p[0].toFixed(1)); c.setAttribute("cy", p[1].toFixed(1)); op(c, fade(t3, 2.2, 2.4, 6.2, 6.7));
+  });
+  op(lb1, in3 ? fade(t3, 2.4, 2.8, 6.2, 6.6) : 0);
+  op(lb2, in3 ? fade(t3, 2.9, 3.3, 6.2, 6.6) : 0);
+  op(lb3, in3 ? fade(t3, 3.4, 3.8, 6.2, 6.6) : 0);
+  op(lb4, in3 ? fade(t3, 3.9, 4.3, 6.2, 6.6) : 0);
+  op(nDir, in3 ? fade(t3, 5.0, 5.3, 6.3, 6.6) : 0);
+
+  /* zoom panel */
+  op(ZP, in3 ? fade(t3, 6.6, 7.1, 13.4, 13.9) : 0);
+  if(in3 && t3 > 6.5 && t3 < 14){
+    const a = zAlpha(t3), on = isOn(a);
+    const b0 = a + 90;  /* enamel half: centred opposite the bare face (bare centre = a - 90) */
+    const p0 = pol(LC[0], LC[1], 51.5, b0 - 90), pm = pol(LC[0], LC[1], 51.5, b0), p1 = pol(LC[0], LC[1], 51.5, b0 + 90);
+    zEnam.setAttribute("d", `M${p0[0].toFixed(1)} ${p0[1].toFixed(1)} A51.5 51.5 0 0 1 ${pm[0].toFixed(1)} ${pm[1].toFixed(1)} A51.5 51.5 0 0 1 ${p1[0].toFixed(1)} ${p1[1].toFixed(1)}`);
+    op(zSpark, on ? .7 + .3 * Math.sin(T * 30) : 0);
+    zRod.setAttribute("transform", `translate(${DC[0]} ${DC[1]}) rotate(${(a % 360).toFixed(1)})`);
+    zChipT.textContent = on ? "전류 ON" : "전류 OFF";
+    zChipT.setAttribute("fill", on ? C.clayHi : C.sand); zChipR.setAttribute("stroke", on ? C.clayHi : C.sand);
+  }
+
+  /* current ladder + heat panel */
+  op(IP.g, in3 ? fade(t3, 13.8, 14.3, 19.9, 20.4) : 0);
+  if(in3) runLadder(IP, t3, 14.6, 1.0);
+  op(HP, in3 ? fade(t3, 20.3, 20.8, 25.6, 26) : 0);
+  hR.forEach((g, i) => op(g, in3 ? seg(t3, 20.8 + i * .45, 21.1 + i * .45) : 0));
+  op(hF, in3 ? seg(t3, 22.2, 22.6) : 0);
+  hC.forEach((g, i) => op(g, in3 ? seg(t3, 23.0 + i * .9, 23.4 + i * .9) : 0));
+
+  /* scene 4: front-view magnet field */
+  FF.forEach((p, j) => {
+    const v = in4 ? fade(t4, .2, .6, 4.3, 4.8) : 0;
+    if(v <= 0){ op(p, 0); return; }
+    const d = eio(seg(t4, .3 + j * .12, 1.6 + j * .12));
+    p.setAttribute("stroke-dasharray", `${p._L.toFixed(0)} ${p._L.toFixed(0)}`); p.setAttribute("stroke-dashoffset", (p._L * (1 - d)).toFixed(1));
+    op(p, .85 * v);
+  });
+  op(magPole, in4 ? fade(t4, .4, .8, 4.3, 4.8) : 0);
+  op(nField, in4 ? fade(t4, 2.8, 3.1, 4.3, 4.7) : 0);
+
+  /* side panel */
+  op(SP, in4 ? fade(t4, 4.6, 5.1, 14.8, 15.3) : 0);
+  if(in4 && t4 > 4.5 && t4 < 15.4){
+    sField.forEach((p, j) => { const d = eio(seg(t4, 5.0 + j * .1, 5.9 + j * .1)); p.setAttribute("stroke-dasharray", `${p._L.toFixed(0)} ${p._L.toFixed(0)}`); p.setAttribute("stroke-dashoffset", (p._L * (1 - d)).toFixed(1)); op(p, .9); });
+    const a = sAlpha(t4), started = t4 >= 6.0, on = started && isOn(a), sa = Math.sin(a * D2R), ca = Math.cos(a * D2R);
+    sRot.setAttribute("transform", `translate(${C4[0]} ${C4[1]}) rotate(${(a % 360).toFixed(1)})`);
+    const cfTarget = on ? 1 : 0;
+    op(sCF, started ? cfTarget * seg(t4, 6.0, 6.6) : 0);
+    const mx = sa, my = -ca;  /* coil dipole direction on screen */
+    const show = on ? seg(t4, 6.2, 6.7) : 0;
+    [[sN, 1], [sS, -1]].forEach(([o, s]) => {
+      const x = C4[0] + s * 46 * mx, y = C4[1] + s * 46 * my;
+      o.g.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)})`); op(o.g, show);
+      const f = t4 >= 8 ? show * clamp(Math.abs(sa) * 1.6) : 0, dir = s > 0 ? -1 : 1;
+      o.ar.setAttribute("x1", (x + 24 * Math.sign(mx || 1) * s).toFixed(1)); o.ar.setAttribute("y1", y.toFixed(1));
+      o.ar.setAttribute("x2", (x + 24 * Math.sign(mx || 1) * s).toFixed(1)); o.ar.setAttribute("y2", (y + dir * 46).toFixed(1));
+      op(o.ar, f);
+      o.at.textContent = s > 0 ? "밀어냄" : "끌어당김";
+      o.at.setAttribute("x", (x + 24 * Math.sign(mx || 1) * s + (s * Math.sign(mx || 1) > 0 ? 10 : -10)).toFixed(1)); o.at.setAttribute("y", (y + dir * 30).toFixed(1));
+      o.at.setAttribute("text-anchor", s * Math.sign(mx || 1) > 0 ? "start" : "end");
+      op(o.at, f);
+    });
+    op(leg4, seg(t4, 6.2, 6.7));
+    op(sChip, seg(t4, 6.0, 6.4));
+    const st = !started ? "" : on ? "전류 ON · 코일 = 전자석" : "전류 OFF · 관성으로 회전";
+    if(sChipT.textContent !== st) sChipT.textContent = st;
+    sChipT.setAttribute("fill", on ? C.clayHi : C.sand); sChipR.setAttribute("stroke", on ? C.clayHi : C.sand);
+    op(sNote, seg(t4, 12.4, 12.8));
+  }
+
+  /* magnetic ladder */
+  op(BP.g, in4 ? fade(t4, 15.2, 15.7, 23.7, 24) : 0);
+  if(in4) runLadder(BP, t4, 16.0, 1.05);
+  op(bBox, in4 ? seg(t4, 18.8, 19.3) : 0);
+
+  /* scene 5 */
+  op(finger, in5 ? fade(t5, 1.9, 2.2, 2.6, 2.95) : 0);
+  if(in5){
+    const p = eio(seg(t5, 1.9, 2.45)), q = eout(seg(t5, 2.45, 2.9));
+    const fx = lerp(lerp(760, 652, p), 720, q), fy = lerp(lerp(215, 296, p), 240, q);
+    finger.setAttribute("transform", `translate(${fx.toFixed(1)} ${fy.toFixed(1)}) rotate(${lerp(-28, -48, q).toFixed(1)})`);
+  }
+  op(nSpeed, in5 ? fade(t5, 3.4, 3.8, 5.4, 5.7) : 0);
+  op(nDirR, in5 ? fade(t5, 5.7, 6.0, 7.2, 7.4) : 0);
+  op(hud, in5 ? seg(t5, .6, 1.1) * (1 - seg(t5, 11.6, 12)) : 0);
+  if(in5){
+    const out = t5 >= 7.6;
+    hBat.textContent = out ? "건전지: 뺌" : "건전지: 끼움"; hBatDot.setAttribute("fill", out ? "#b8ab95" : C.clay);
+    let hs = "멈춤";
+    if(t5 >= 2.45 && t5 < 7.6) hs = "한 방향으로 회전 중"; else if(t5 >= 7.6 && t5 < 11.5) hs = "관성으로 감속"; else if(t5 >= 11.5) hs = "멈춤";
+    if(hs !== lastHs){ lastHs = hs; const col = hs === "한 방향으로 회전 중" ? C.clayHi : C.sand; hsTxt.textContent = "코일: " + hs; hsTxt.setAttribute("fill", col); hsDot.setAttribute("fill", col); hsBox.setAttribute("stroke", col); }
+  }
+  op(CP, in5 ? seg(t5, 11.8, 12.3) : 0);
+  CK.forEach((g, i) => op(g, in5 ? seg(t5, 12.4 + i * 1.2, 12.8 + i * 1.2) : 0));
+  op(ckNote, in5 ? seg(t5, 16.0, 16.3) : 0);
+
+  /* title card */
+  const sc = SCENES[si], tl = T - sc.start;
+  if(si !== lastScene){ lastScene = si; $("tcK").textContent = "PART " + (si + 1); $("tcN").textContent = sc.card; }
+  op(tcard, si === 0 ? fade(tl, -1, 0, .7, 1.0) : fade(tl, 0, .15, .7, 1.0));
+  tcIn.setAttribute("transform", `translate(0 ${lerp(26, 0, eout(seg(tl, 0, .5))).toFixed(1)})`);
+  const lw = 180 * eout(seg(tl, .1, .6));
+  tcL.setAttribute("x", (600 - lw / 2).toFixed(1)); tcL.setAttribute("width", lw.toFixed(1));
+
+  /* subtitle */
+  let b = sc.beats[0];
+  for(const x of sc.beats) if(tl >= x.t) b = x;
+  if(b !== lastBeat){ lastBeat = b; setSub(b.title); }
+
+  scrub.value = R.toFixed(1);
+  clock.textContent = `${fmt(R)} / ${fmt(TOTAL_R)}`;
+}
+function fmt(s){ s = Math.floor(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+
+/* ---------- controls ---------- */
+const scrub = $("scrub"), clock = $("clock"), playBtn = $("play"), playTxt = $("playTxt"), playIcon = $("playIcon");
+/* time warp [script s, real s]: one segment per scene now (1:1); change only here to retime */
+/* scene 2: parts flying around = short, hands-on making (winding, tying, sanding) = long */
+const SEGS = [[11.6, 11.6],
+  [1.0, 1.0], [1.0, .6], [1.6, 6], [1.3, 1.8], [.7, 1.2], [.4, 1.5], [.5, 4], [.7, 3],
+  [.4, .5], [1.0, 5], [.3, .4], [1.0, 5.5], [.5, .6], [.9, 1.8], [.5, 2.5],
+  [.1, .2], [.7, 1.6], [.3, 2.5], [.1, .3], [.9, 2.2], [.5, 2.5], [1.1, 1.8],
+  [14, 14], [15.2, 15.2], [17, 17]];
+const WS = [0], WR = [0];
+SEGS.forEach(g => { WS.push(WS[WS.length - 1] + g[0]); WR.push(WR[WR.length - 1] + g[1]); });
+const TOTAL_R = WR[WR.length - 1];
+function warp(x, A, B){ if(x <= 0) return 0; if(x >= A[A.length - 1]) return B[B.length - 1]; let i = 0; while(A[i + 1] < x) i++; return B[i] + (x - A[i]) / (A[i + 1] - A[i]) * (B[i + 1] - B[i]); }
+const R2S = r => warp(r, WR, WS), S2R = t => warp(t, WS, WR);
+scrub.max = TOTAL_R;
+let R = 0, T = 0, playing = false, lastTs = null, stopAt = null;
+function sync(){ T = Math.min(TOTAL - 1e-3, R2S(R)); render(T); }
+function setPlaying(v){
+  playing = v;
+  if(v && R >= TOTAL_R - .01) R = 0;
+  if(v && stopAt != null && R >= stopAt - .01) endSection();
+  const ended = !v && R >= TOTAL_R - .01;
+  playTxt.textContent = v ? "일시정지" : (ended ? "다시 보기" : "재생");
+  playBtn.setAttribute("aria-label", playTxt.textContent);
+  playIcon.setAttribute("d", v ? "M2.5 1.5 H5.5 V12.5 H2.5 Z M8.5 1.5 H11.5 V12.5 H8.5 Z" : "M3 1.5 L12 7 L3 12.5 Z");
+  lastTs = null;
+  if(typeof wake === "function" && typeof idleT !== "undefined") wake();
+}
+let fAvg = 16.7, fN = 0, lite = false;
+function frame(ts){
+  if(playing){
+    if(lastTs != null){
+      const dt = ts - lastTs;
+      R = Math.min(TOTAL_R, R + Math.min(.1, dt / 1000));
+      fAvg = fAvg * .92 + dt * .08;
+      if(++fN > 60 && fAvg > 26 && !lite){ lite = true; $("svg").classList.add("lite"); }
+    }
+    lastTs = ts;
+    if(R >= TOTAL_R){ R = TOTAL_R; setPlaying(false); }
+    if(stopAt != null && R >= stopAt){ R = stopAt; endSection(); setPlaying(false); }
+    sync();
+  }
+  requestAnimationFrame(frame);
+}
+playBtn.addEventListener("click", () => setPlaying(!playing));
+scrub.addEventListener("input", () => { endSection(); R = parseFloat(scrub.value) || 0; sync(); });
+/* "만드는 방법" button: replay only the assembly part (scene 2), then pause */
+const howBtn = $("howto");
+function endSection(){ stopAt = null; howBtn.classList.remove("on"); }
+howBtn.addEventListener("click", () => {
+  R = S2R(ST[1]); stopAt = S2R(ST[2]) - .05;
+  howBtn.classList.add("on"); sync(); setPlaying(true);
+});
+document.addEventListener("keydown", e => {
+  if(e.target && (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON") && e.key === " ") return;
+  if(e.key === " "){ e.preventDefault(); setPlaying(!playing); }
+  else if(e.key === "ArrowRight" && e.target.tagName !== "INPUT"){ R = Math.min(TOTAL_R, R + 3); sync(); }
+  else if(e.key === "ArrowLeft" && e.target.tagName !== "INPUT"){ R = Math.max(0, R - 3); sync(); }
+});
+
+/* fullscreen: native API when allowed, otherwise viewport-filling mode; portrait phones rotate the inner .rig */
+const playerEl = $("player"), fsBtn = $("fs"), rotBtn = $("rot"), fsIcon = $("fsIcon"), fsTxt = $("fsTxt");
+const FS_ON = "M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4", FS_OFF = "M6 2v4H2M14 6h-4V2M10 14v-4h4M2 10h4v4";
+let isFull = false, rotPref = null, nativeSeen = false;
+function applyRot(){
+  const portrait = window.innerHeight > window.innerWidth;
+  playerEl.classList.toggle("rot", isFull && (rotPref === null ? portrait : rotPref));
+  rotBtn.hidden = !isFull;
+}
+let idleT = null;
+function wake(){
+  playerEl.classList.remove("idle"); clearTimeout(idleT);
+  if(isFull && playing) idleT = setTimeout(() => playerEl.classList.add("idle"), 2500);
+}
+["pointerdown", "pointermove", "keydown", "touchstart"].forEach(ev => playerEl.addEventListener(ev, wake, { passive: true }));
+function setFull(v){
+  isFull = v; fN = 0; fAvg = 16.7;
+  playerEl.classList.toggle("full", v);
+  document.documentElement.classList.toggle("lock", v);
+  fsIcon.setAttribute("d", v ? FS_OFF : FS_ON);
+  fsTxt.textContent = v ? "나가기" : "전체화면";
+  fsBtn.setAttribute("aria-label", fsTxt.textContent);
+  if(v){
+    try { const r = playerEl.requestFullscreen && playerEl.requestFullscreen(); if(r && r.catch) r.catch(() => {}); } catch(e){}
+    try { if(screen.orientation && screen.orientation.lock){ const r = screen.orientation.lock("landscape"); if(r && r.catch) r.catch(() => {}); } } catch(e){}
+  } else {
+    rotPref = null; nativeSeen = false;
+    try { if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(e){}
+    try { if(document.fullscreenElement){ const r = document.exitFullscreen(); if(r && r.catch) r.catch(() => {}); } } catch(e){}
+  }
+  applyRot(); wake();
+}
+fsBtn.addEventListener("click", () => setFull(!isFull));
+rotBtn.addEventListener("click", () => { rotPref = !playerEl.classList.contains("rot"); applyRot(); });
+document.addEventListener("fullscreenchange", () => { if(document.fullscreenElement) nativeSeen = true; else if(isFull && nativeSeen) setFull(false); setTimeout(applyRot, 120); });
+window.addEventListener("resize", applyRot);
+document.addEventListener("keydown", e => { if(e.key === "Escape" && isFull) setFull(false); });
+
+window.__anim = { seek(t){ R = S2R(t); sync(); }, total: TOTAL_R, starts: ST, script: TOTAL };
+
+sync();
+let reduce = false;
+try { reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch(e){}
+setPlaying(!reduce);
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>
